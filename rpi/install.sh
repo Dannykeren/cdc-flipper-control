@@ -59,8 +59,7 @@ chmod +x $INSTALL_DIR/http_test.py
 cat > /etc/systemd/system/cec-flipper.service << EOFINNER
 [Unit]
 Description=CEC Flipper Control
-After=usb-gadget.service
-Requires=usb-gadget.service
+After=network.target
 
 [Service]
 Type=simple
@@ -75,7 +74,6 @@ Group=root
 WantedBy=multi-user.target
 EOFINNER
 
-systemctl enable usb-gadget.service
 systemctl enable cec-flipper.service
 
 CURRENT_USER=$(logname 2>/dev/null || echo "pi")
