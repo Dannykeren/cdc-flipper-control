@@ -1,0 +1,65 @@
+name: Build CEC Flipper Control
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  release:
+    types: [ published ]
+
+jobs:
+  build-flipper:
+    runs-on: ubuntu-latest
+    name: Build Flipper Zero App
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    
+    - name: Build Flipper Application
+      uses: flipperdevices/flipperzero-ufbt-action@v0.1.2
+      id: build-app
+      with:
+        app-dir: ./flipper
+    
+    - name: Upload app artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: cec-remote-flipper-app
+        path: ${{ steps.build-app.outputs.fap-artifacts }}
+        retention-days: 30
+    
+    - name: Upload to release
+      if: github.event_name == 'release'
+      uses: softprops/action-gh-release@v1
+      with:
+        files: ${{ steps.build-app.outputs.fap-artifacts }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  test-rpi:
+    runs-on: ubuntu-latest
+    name: Test RPi Components
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyserial
+    
+    - name: Test Python files
+      run: |
+        cd rpi
+        python -m py_compile cec_control.py
+        python -m py_compile main.py
