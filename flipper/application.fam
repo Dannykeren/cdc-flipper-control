@@ -4,7 +4,7 @@ App(
     apptype=FlipperAppType.EXTERNAL,
     entry_point="cec_remote_app",
     stack_size=2 * 1024,
-    fap_category="GPIO",
+    fap_category="Tools",
     fap_description="Control CEC devices via Raspberry Pi",
     fap_author="Danny Keren",
     fap_version="1.0",
