@@ -9,5 +9,4 @@ App(
     fap_author="Danny Keren",
     fap_version="1.0",
     fap_icon="cec_10px.png",
-    requires=["expansion"],
 )
