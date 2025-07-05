@@ -17,7 +17,16 @@ echo "🔄 Updating system..."
 apt update && apt upgrade -y
 
 echo "📦 Installing required packages..."
-apt install -y cec-utils python3-pip python3-venv git chromium-browser
+apt install -y cec-utils python3-pip python3-venv git
+
+# Check if we're on Pi OS Lite (no GUI)
+if ! dpkg -l | grep -q "raspberrypi-ui-mods"; then
+    echo "🖥️ Installing desktop environment for HDMI display..."
+    apt install -y raspberrypi-ui-mods chromium-browser
+else
+    echo "🖥️ Desktop environment detected, installing browser..."
+    apt install -y chromium-browser
+fi
 
 echo "🔧 Enabling UART for Flipper communication..."
 # Remove conflicting overlay first (check both config locations)
@@ -152,8 +161,12 @@ echo "🖥️ Setting up HDMI display auto-launch..."
 # Enable desktop environment for HDMI display
 systemctl set-default graphical.target
 
-# Create HDMI display service
-cat > /etc/systemd/system/cec-hdmi-display.service << EOFINNER
+# Check if desktop packages are installed
+if dpkg -l | grep -q "raspberrypi-ui-mods"; then
+    echo "✅ Desktop environment available for HDMI display"
+    
+    # Create HDMI display service
+    cat > /etc/systemd/system/cec-hdmi-display.service << EOFINNER
 [Unit]
 Description=CEC HDMI Professional Display
 After=cec-flipper.service graphical-session.target
@@ -173,7 +186,12 @@ RestartSec=10
 WantedBy=graphical.target
 EOFINNER
 
-systemctl enable cec-hdmi-display.service
+    systemctl enable cec-hdmi-display.service
+    echo "✅ HDMI auto-launch service enabled"
+else
+    echo "⚠️ No desktop environment - HDMI display available via browser only"
+    echo "💡 Access at: http://[PI_IP]:8080/display"
+fi
 
 # Create user autostart directory and file (fallback)
 CURRENT_USER=$(logname 2>/dev/null || echo "pi")
