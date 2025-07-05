@@ -38,7 +38,7 @@ else
 fi
 
 # Add USB overlay to boot config
-if ! grep -q "^dtoverlay=$USB_OVERLAY" /boot/config.txt; then
+if ! grep -q "^dtoverlay=$USB_OVERLAY" /boot/config.txt && ! grep -q "^dtoverlay=$USB_OVERLAY," /boot/config.txt; then
     # Remove any existing USB overlays first
     sed -i '/^dtoverlay=dwc/d' /boot/config.txt
     if [[ "$USB_OVERLAY" == "dwc_otg" ]]; then
