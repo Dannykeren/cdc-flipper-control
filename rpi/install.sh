@@ -1,7 +1,7 @@
 #!/bin/bash
 
 echo "========================================="
-echo "  CEC Flipper Control - Minimal Setup"
+echo "  CEC Flipper Control - Setup with UART"
 echo "   Fresh Raspberry Pi Zero W"
 echo "========================================="
 
@@ -18,8 +18,14 @@ apt update && apt upgrade -y
 echo "📦 Installing required packages..."
 apt install -y cec-utils python3-pip python3-venv git
 
-echo "🔧 Configuring USB gadget mode..."
+echo "🔧 Enabling UART for Flipper communication..."
+# Enable UART
+echo "enable_uart=1" >> /boot/config.txt
+echo "dtoverlay=disable-bt" >> /boot/config.txt
+# Remove console from UART
+sed -i 's/console=serial0,115200 //' /boot/cmdline.txt
 
+echo "🏗️ Setting up application..."
 INSTALL_DIR="/opt/cec-flipper"
 mkdir -p $INSTALL_DIR
 
@@ -56,6 +62,7 @@ fi
 
 chmod +x $INSTALL_DIR/http_test.py
 
+echo "🔧 Creating systemd service..."
 cat > /etc/systemd/system/cec-flipper.service << EOFINNER
 [Unit]
 Description=CEC Flipper Control
@@ -79,7 +86,11 @@ systemctl enable cec-flipper.service
 CURRENT_USER=$(logname 2>/dev/null || echo "pi")
 usermod -a -G dialout,tty $CURRENT_USER
 
-echo "Setup complete! Reboot required."
+echo "✅ Setup complete!"
+echo "📌 UART enabled for Flipper communication"
+echo "📌 HTTP server available on port 8080"
+echo "🔄 Reboot required to enable UART"
+
 read -p "Reboot now? (y/n) " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
