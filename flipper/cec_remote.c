@@ -89,9 +89,9 @@ static void cec_remote_uart_deinit(CECRemoteApp* app) {
 }
 
 static void uart_send_byte(uint8_t byte) {
-    uint32_t bit_time = 1000000 / 115200; // microseconds per bit
+    uint32_t bit_time = 8; // ~8.7us for 115200 baud, rounded to 8
     
-    // Start bit
+    // Start bit (low)
     furi_hal_gpio_write(&gpio_ext_pa7, false);  // Pin 13 TX
     furi_delay_us(bit_time);
     
@@ -101,13 +101,16 @@ static void uart_send_byte(uint8_t byte) {
         furi_delay_us(bit_time);
     }
     
-    // Stop bit
+    // Stop bit (high)
     furi_hal_gpio_write(&gpio_ext_pa7, true);
+    furi_delay_us(bit_time);
+    
+    // Extra stop bit time for stability
     furi_delay_us(bit_time);
 }
 
 static uint8_t uart_receive_byte(uint32_t timeout_ms) {
-    uint32_t bit_time = 1000000 / 115200; // microseconds per bit
+    uint32_t bit_time = 8; // ~8.7us for 115200 baud, rounded to 8
     uint32_t start_time = furi_get_tick();
     
     // Wait for start bit (line goes low)
@@ -115,13 +118,13 @@ static uint8_t uart_receive_byte(uint32_t timeout_ms) {
         if(furi_get_tick() - start_time > timeout_ms) {
             return 0; // Timeout
         }
-        furi_delay_us(10);
+        furi_delay_us(1);
     }
     
-    // Wait half bit time to sample in middle of start bit
-    furi_delay_us(bit_time / 2);
+    // Wait to middle of start bit
+    furi_delay_us(bit_time + (bit_time / 2));
     
-    // Read data bits
+    // Read data bits (LSB first)
     uint8_t byte = 0;
     for(int i = 0; i < 8; i++) {
         furi_delay_us(bit_time);
