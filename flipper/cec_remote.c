@@ -131,9 +131,14 @@ static bool cec_remote_send_command(CECRemoteApp* app, const char* command) {
         return false;
     }
     
-    // For now, just show success message
-    strcpy(app->result_buffer, "Command sent to Pi");
-    return true;
+    // Send command but show honest result
+    if(cec_remote_uart_send(app, command)) {
+        strcpy(app->result_buffer, "UART: Command sent\n(No response capability)");
+        return true;
+    } else {
+        strcpy(app->result_buffer, "ERROR: UART send failed");
+        return false;
+    }
 }
 
 // Menu callback
@@ -198,21 +203,21 @@ void cec_remote_scene_start_on_enter(void* context) {
         furi_delay_ms(500);
         
         // Send PING command to test connection
-        if(cec_remote_uart_send(app, "{\"command\":\"PING\"}")) {
-            furi_delay_ms(1000);
-            
-            app->is_connected = true;
-            notification_message(app->notifications, &sequence_success);
-            scene_manager_next_scene(app->scene_manager, CECRemoteSceneMenu);
-            return;
-        }
+        cec_remote_uart_send(app, "{\"command\":\"PING\"}");
+        furi_delay_ms(1000);
+        
+        // For now, assume connection failed since we can't receive responses
+        app->is_connected = false;
+        popup_set_header(app->popup, "UART Initialized", 64, 10, AlignCenter, AlignTop);
+        popup_set_text(app->popup, "Sending commands\nPress Back to exit", 64, 32, AlignCenter, AlignCenter);
+        notification_message(app->notifications, &sequence_error);
+    } else {
+        // UART init failed
+        app->is_connected = false;
+        popup_set_header(app->popup, "UART Failed", 64, 10, AlignCenter, AlignTop);
+        popup_set_text(app->popup, "Check wiring\nPress Back to exit", 64, 32, AlignCenter, AlignCenter);
+        notification_message(app->notifications, &sequence_error);
     }
-    
-    // Connection failed
-    app->is_connected = false;
-    popup_set_header(app->popup, "Connection Failed", 64, 10, AlignCenter, AlignTop);
-    popup_set_text(app->popup, "Check Pi connection\nPress Back to exit", 64, 32, AlignCenter, AlignCenter);
-    notification_message(app->notifications, &sequence_error);
 }
 
 bool cec_remote_scene_start_on_event(void* context, SceneManagerEvent event) {
@@ -220,7 +225,7 @@ bool cec_remote_scene_start_on_event(void* context, SceneManagerEvent event) {
     bool consumed = false;
     
     if(event.type == SceneManagerEventTypeBack) {
-        // Exit the app completely
+        // Exit the app from start scene
         view_dispatcher_stop(app->view_dispatcher);
         consumed = true;
     }
