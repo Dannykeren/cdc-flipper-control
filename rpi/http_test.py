@@ -54,5 +54,5 @@ class CECHandler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     server = HTTPServer(('0.0.0.0', 8080), CECHandler)
     print(f"HTTP CEC Test Server running on http://{get_ip_address()}:8080")
-    print(f"Test with: curl 'http://{ip_address}:8080?cmd=PING'")
+    print(f"Test with: curl 'http://{get_ip_address}:8080?cmd=PING'")
     server.serve_forever()
