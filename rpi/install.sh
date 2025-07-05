@@ -1,4 +1,3 @@
-cat > install.sh << 'EOF'
 #!/bin/bash
 
 echo "========================================="
@@ -174,4 +173,3 @@ echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
   reboot
 fi
-EOF
