@@ -376,11 +376,15 @@ static void display_logs_on_hdmi(CECRemoteApp* app) {
     // Send command to display logs on HDMI
     const char* display_command = "{\"command\":\"DISPLAY_LOGS_ON_HDMI\"}";
     
-    popup_set_header(app->popup, "Displaying Logs", 64, 10, AlignCenter, AlignTop);
-    popup_set_text(app->popup, "Logs shown on HDMI display\nPress Back when done", 64, 32, AlignCenter, AlignCenter);
+    popup_set_header(app->popup, "HDMI Display", 64, 10, AlignCenter, AlignTop);
+    popup_set_text(app->popup, "✅ Logs shown on HDMI\nCheck connected display", 64, 32, AlignCenter, AlignCenter);
     view_dispatcher_switch_to_view(app->view_dispatcher, CECRemoteViewPopup);
     
     cec_remote_uart_send(app, display_command);
+    
+    // Auto return to menu after 2 seconds
+    furi_delay_ms(2000);
+    scene_manager_previous_scene(app->scene_manager);
 }
 
 // Clear logs
@@ -388,7 +392,7 @@ static void clear_logs(CECRemoteApp* app) {
     const char* clear_command = "{\"command\":\"CLEAR_FLIPPER_LOG\"}";
     
     popup_set_header(app->popup, "Clearing Logs", 64, 10, AlignCenter, AlignTop);
-    popup_set_text(app->popup, "Logs cleared", 64, 32, AlignCenter, AlignCenter);
+    popup_set_text(app->popup, "✅ Logs cleared", 64, 32, AlignCenter, AlignCenter);
     view_dispatcher_switch_to_view(app->view_dispatcher, CECRemoteViewPopup);
     
     cec_remote_uart_send(app, clear_command);
@@ -516,8 +520,7 @@ void cec_remote_scene_vendor_select_on_enter(void* context) {
     submenu_add_item(app->submenu, "NEC Projector", CECVendorNEC, cec_remote_vendor_callback, app);
     submenu_add_item(app->submenu, "Epson Projector", CECVendorEpson, cec_remote_vendor_callback, app);
     submenu_add_item(app->submenu, "LG TV", CECVendorLG, cec_remote_vendor_callback, app);
-    submenu_add_item(app->submenu, "--- Logs ---", CECVendorDisplayLogs, cec_remote_vendor_callback, app);
-    submenu_add_item(app->submenu, "📺 Show Logs on HDMI", CECVendorDisplayLogs, cec_remote_vendor_callback, app);
+    submenu_add_item(app->submenu, "📺 Show on HDMI", CECVendorDisplayLogs, cec_remote_vendor_callback, app);
     submenu_add_item(app->submenu, "🗑️ Clear Logs", CECVendorClearLogs, cec_remote_vendor_callback, app);
     
     view_dispatcher_switch_to_view(app->view_dispatcher, CECRemoteViewSubmenu);
@@ -560,7 +563,7 @@ void cec_remote_scene_command_menu_on_enter(void* context) {
     submenu_add_item(app->submenu, "🔇 Mute", CECCommandMute, cec_remote_command_callback, app);
     submenu_add_item(app->submenu, "🔍 Scan Devices", CECCommandScan, cec_remote_command_callback, app);
     submenu_add_item(app->submenu, "ℹ️ Status", CECCommandStatus, cec_remote_command_callback, app);
-    submenu_add_item(app->submenu, "📺 Show Logs on HDMI", CECCommandDisplayLogs, cec_remote_command_callback, app);
+    submenu_add_item(app->submenu, "📺 Show on HDMI", CECCommandDisplayLogs, cec_remote_command_callback, app);
     submenu_add_item(app->submenu, "🗑️ Clear Logs", CECCommandClearLogs, cec_remote_command_callback, app);
     submenu_add_item(app->submenu, "⚙️ Custom Command", CECCommandCustom, cec_remote_command_callback, app);
     submenu_add_item(app->submenu, "⬅️ Back", CECCommandBack, cec_remote_command_callback, app);
