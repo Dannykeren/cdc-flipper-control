@@ -12,6 +12,28 @@
 #include <string.h>
 #include <stdio.h>
 
+typedef struct {
+    Gui*                gui;
+    ViewDispatcher*     view_dispatcher;
+    SceneManager*       scene_manager;
+    Submenu*            submenu;
+    TextInput*          text_input;
+    Popup*              popup;
+    NotificationApp*    notifications;
+    char                text_buffer[256];
+    char                custom_command[64];
+    char                result_buffer[512];
+    bool                is_connected;
+    bool                uart_initialized;
+    uint8_t             selected_vendor;
+    FuriHalSerialHandle* serial_handle;
+    FuriStreamBuffer*   rx_stream;
+    FuriTimer*          cleanup_timer;
+} CECRemoteApp;
+
+static CECRemoteApp* cec_remote_app_alloc(void);
+static void          cec_remote_app_free(CECRemoteApp* app);
+
 #define TAG "CECRemote"
 
 int32_t cec_remote_app(void* p) {
