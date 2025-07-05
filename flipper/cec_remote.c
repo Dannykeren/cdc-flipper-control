@@ -6,14 +6,11 @@
 #include <gui/modules/text_input.h>
 #include <gui/modules/popup.h>
 #include <notification/notification_messages.h>
+#include <expansion/expansion.h>
+#include <furi_hal_gpio.h>
 #include <furi_hal_uart.h>
-#include <furi_hal_console.h>
-#include <stream/stream.h>
-#include <toolbox/stream/string_stream.h>
 
 #define TAG "CECRemote"
-#define UART_CH (FuriHalUartIdUSART1)
-#define UART_BAUD (115200)
 
 typedef enum {
     CECRemoteViewSubmenu,
@@ -53,8 +50,7 @@ typedef struct {
     
     // UART communication
     FuriStreamBuffer* uart_stream;
-    FuriThread* uart_thread;
-    bool uart_thread_running;
+    bool uart_initialized;
 } CECRemoteApp;
 
 // Forward declarations
@@ -81,32 +77,42 @@ static void uart_on_irq_cb(UartIrqEvent ev, uint8_t data, void* context) {
 }
 
 static bool cec_remote_uart_init(CECRemoteApp* app) {
+    // Initialize UART stream buffer
     app->uart_stream = furi_stream_buffer_alloc(1024, 1);
     
-    furi_hal_uart_init(UART_CH, UART_BAUD);
-    furi_hal_uart_set_irq_cb(UART_CH, uart_on_irq_cb, app);
+    // Initialize UART on expansion pins
+    furi_hal_uart_init(FuriHalUartIdUSART1, 115200);
+    furi_hal_uart_set_irq_cb(FuriHalUartIdUSART1, uart_on_irq_cb, app);
     
+    app->uart_initialized = true;
     return true;
 }
 
 static void cec_remote_uart_deinit(CECRemoteApp* app) {
-    furi_hal_uart_deinit(UART_CH);
-    furi_stream_buffer_free(app->uart_stream);
+    if(app->uart_initialized) {
+        furi_hal_uart_deinit(FuriHalUartIdUSART1);
+        furi_stream_buffer_free(app->uart_stream);
+        app->uart_initialized = false;
+    }
 }
 
 static bool cec_remote_uart_send(CECRemoteApp* app, const char* data) {
-    if(!app->is_connected) {
+    if(!app->uart_initialized) {
         return false;
     }
     
     FURI_LOG_I(TAG, "Sending UART: %s", data);
-    furi_hal_uart_tx(UART_CH, (uint8_t*)data, strlen(data));
-    furi_hal_uart_tx(UART_CH, (uint8_t*)"\n", 1);
+    furi_hal_uart_tx(FuriHalUartIdUSART1, (uint8_t*)data, strlen(data));
+    furi_hal_uart_tx(FuriHalUartIdUSART1, (uint8_t*)"\n", 1);
     
     return true;
 }
 
 static bool cec_remote_uart_receive(CECRemoteApp* app, char* buffer, size_t buffer_size, uint32_t timeout_ms) {
+    if(!app->uart_initialized) {
+        return false;
+    }
+    
     size_t bytes_received = 0;
     uint32_t start_time = furi_get_tick();
     
@@ -133,12 +139,13 @@ static bool cec_remote_uart_receive(CECRemoteApp* app, char* buffer, size_t buff
 
 static bool cec_remote_send_command(CECRemoteApp* app, const char* command) {
     if(!cec_remote_uart_send(app, command)) {
+        strncpy(app->result_buffer, "UART send failed", sizeof(app->result_buffer) - 1);
         return false;
     }
     
     // Wait for response
     if(!cec_remote_uart_receive(app, app->result_buffer, sizeof(app->result_buffer), 10000)) {
-        snprintf(app->result_buffer, sizeof(app->result_buffer), "No response from Pi");
+        strncpy(app->result_buffer, "No response from Pi", sizeof(app->result_buffer) - 1);
         return false;
     }
     
@@ -309,7 +316,7 @@ void cec_remote_scene_result_on_enter(void* context) {
         notification_message(app->notifications, &sequence_success);
     } else {
         popup_set_header(app->popup, "Failed", 64, 10, AlignCenter, AlignTop);
-        popup_set_text(app->popup, "Check connection\nPress Back", 64, 32, AlignCenter, AlignCenter);
+        popup_set_text(app->popup, app->result_buffer, 64, 32, AlignCenter, AlignCenter);
         notification_message(app->notifications, &sequence_error);
     }
 }
@@ -403,8 +410,7 @@ static CECRemoteApp* cec_remote_app_alloc(void) {
     
     app->is_connected = false;
     app->uart_stream = NULL;
-    app->uart_thread = NULL;
-    app->uart_thread_running = false;
+    app->uart_initialized = false;
     
     return app;
 }
@@ -412,7 +418,7 @@ static CECRemoteApp* cec_remote_app_alloc(void) {
 static void cec_remote_app_free(CECRemoteApp* app) {
     furi_assert(app);
     
-    if(app->is_connected) {
+    if(app->uart_initialized) {
         cec_remote_uart_deinit(app);
     }
     
