@@ -19,6 +19,8 @@ echo "📦 Installing required packages..."
 apt install -y cec-utils python3-pip python3-venv git
 
 echo "🔧 Enabling UART for Flipper communication..."
+# Remove conflicting overlay first
+sed -i '/dtoverlay=miniuart-bt/d' /boot/config.txt
 # Enable UART and disable Bluetooth (check if already exists first)
 if ! grep -q "enable_uart=1" /boot/config.txt; then
     echo "enable_uart=1" >> /boot/config.txt
@@ -26,13 +28,13 @@ fi
 if ! grep -q "dtoverlay=disable-bt" /boot/config.txt; then
     echo "dtoverlay=disable-bt" >> /boot/config.txt
 fi
-# Also add miniuart overlay to ensure proper UART
-if ! grep -q "dtoverlay=miniuart-bt" /boot/config.txt; then
-    echo "dtoverlay=miniuart-bt" >> /boot/config.txt
+if ! grep -q "dtparam=uart=on" /boot/config.txt; then
+    echo "dtparam=uart=on" >> /boot/config.txt
 fi
-# Remove console from UART
+# Remove console from UART and fix nr_uarts
 sed -i 's/console=serial0,115200 //' /boot/cmdline.txt
 sed -i 's/console=ttyAMA0,115200 //' /boot/cmdline.txt
+sed -i 's/8250.nr_uarts=0/8250.nr_uarts=1/' /boot/cmdline.txt
 
 echo "🏗️ Setting up application..."
 INSTALL_DIR="/opt/cec-flipper"
