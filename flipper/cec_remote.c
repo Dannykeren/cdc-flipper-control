@@ -1,100 +1,510 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <furi.h>
-#include <furi_hal_gpio.h>
 #include <gui/gui.h>
 #include <gui/view_dispatcher.h>
+#include <gui/scene_manager.h>
+#include <gui/modules/submenu.h>
+#include <gui/modules/text_input.h>
 #include <gui/modules/popup.h>
+#include <notification/notification_messages.h>
+#include <furi_hal_gpio.h>
+#include <expansion/expansion.h>
+#include <string.h>
+#include <stdio.h>
+
+#define TAG "CECRemote"
+
+typedef enum {
+    CECRemoteViewSubmenu,
+    CECRemoteViewTextInput,
+    CECRemoteViewPopup,
+} CECRemoteView;
+
+typedef enum {
+    CECRemoteSceneStart,
+    CECRemoteSceneMenu,
+    CECRemoteSceneCustomCommand,
+    CECRemoteSceneResult,
+    CECRemoteSceneNum,
+} CECRemoteScene;
+
+typedef enum {
+    CECRemoteMenuPowerOn,
+    CECRemoteMenuPowerOff,
+    CECRemoteMenuScan,
+    CECRemoteMenuStatus,
+    CECRemoteMenuCustom,
+} CECRemoteMenuItem;
 
 typedef struct {
     Gui* gui;
     ViewDispatcher* view_dispatcher;
+    SceneManager* scene_manager;
+    Submenu* submenu;
+    TextInput* text_input;
     Popup* popup;
-} SimpleGPIOApp;
+    NotificationApp* notifications;
+    
+    char text_buffer[256];
+    char custom_command[64];
+    char result_buffer[1024];
+    bool is_connected;
+    bool uart_initialized;
+} CECRemoteApp;
 
-// Simple GPIO test - just blink pin 13
-static int32_t gpio_test_task(void* context) {
-    UNUSED(context);
-    
-    // Try different pin definitions to see what works
-    const GpioPin* test_pins[] = {
-        &gpio_ext_pa7,  // Usually pin 13
-        &gpio_ext_pa6,  // Usually pin 14
-        &gpio_ext_pb3,  // Pin 5
-        &gpio_ext_pb2,  // Pin 6
-    };
-    
-    for(int pin_idx = 0; pin_idx < 4; pin_idx++) {
-        // Initialize pin as output
-        furi_hal_gpio_init_simple(test_pins[pin_idx], GpioModeOutputPushPull);
-        
-        // Blink 10 times
-        for(int i = 0; i < 10; i++) {
-            furi_hal_gpio_write(test_pins[pin_idx], true);
-            furi_delay_ms(100);
-            furi_hal_gpio_write(test_pins[pin_idx], false);
-            furi_delay_ms(100);
-        }
-        
-        // Set back to analog
-        furi_hal_gpio_init_simple(test_pins[pin_idx], GpioModeAnalog);
-        
-        // Wait between pins
-        furi_delay_ms(500);
-    }
-    
-    return 0;
-}
+// Forward declarations
+void cec_remote_scene_start_on_enter(void* context);
+bool cec_remote_scene_start_on_event(void* context, SceneManagerEvent event);
+void cec_remote_scene_start_on_exit(void* context);
+void cec_remote_scene_menu_on_enter(void* context);
+bool cec_remote_scene_menu_on_event(void* context, SceneManagerEvent event);
+void cec_remote_scene_menu_on_exit(void* context);
+void cec_remote_scene_custom_on_enter(void* context);
+bool cec_remote_scene_custom_on_event(void* context, SceneManagerEvent event);
+void cec_remote_scene_custom_on_exit(void* context);
+void cec_remote_scene_result_on_enter(void* context);
+bool cec_remote_scene_result_on_event(void* context, SceneManagerEvent event);
+void cec_remote_scene_result_on_exit(void* context);
 
-static bool gpio_test_back_event_callback(void* context) {
-    SimpleGPIOApp* app = context;
-    view_dispatcher_stop(app->view_dispatcher);
+// Simple UART Communication using GPIO bit-banging
+static bool cec_remote_uart_init(CECRemoteApp* app) {
+    // Initialize GPIO pins for UART (Pin 13 = TX, Pin 14 = RX)
+    // Pin 13 confirmed working from GPIO test!
+    furi_hal_gpio_init_simple(&gpio_ext_pa7, GpioModeOutputPushPull);  // Pin 13 TX
+    furi_hal_gpio_init_simple(&gpio_ext_pa6, GpioModeInput);          // Pin 14 RX
+    
+    // Set TX line high (idle state)
+    furi_hal_gpio_write(&gpio_ext_pa7, true);
+    
+    app->uart_initialized = true;
     return true;
 }
 
-static SimpleGPIOApp* gpio_test_app_alloc(void) {
-    SimpleGPIOApp* app = malloc(sizeof(SimpleGPIOApp));
+static void cec_remote_uart_deinit(CECRemoteApp* app) {
+    if(app->uart_initialized) {
+        furi_hal_gpio_init_simple(&gpio_ext_pa7, GpioModeAnalog);  // Pin 13
+        furi_hal_gpio_init_simple(&gpio_ext_pa6, GpioModeAnalog);  // Pin 14
+        app->uart_initialized = false;
+    }
+}
+
+static void uart_send_byte(uint8_t byte) {
+    uint32_t bit_time = 8; // 8μs for 115200 baud (Pin 13 confirmed working!)
+    
+    // Start bit (low)
+    furi_hal_gpio_write(&gpio_ext_pa7, false);
+    furi_delay_us(bit_time);
+    
+    // Data bits (LSB first)
+    for(int i = 0; i < 8; i++) {
+        furi_hal_gpio_write(&gpio_ext_pa7, (byte >> i) & 1);
+        furi_delay_us(bit_time);
+    }
+    
+    // Stop bit (high)
+    furi_hal_gpio_write(&gpio_ext_pa7, true);
+    furi_delay_us(bit_time * 2); // Extra stop time for stability
+}
+
+static uint8_t uart_receive_byte(uint32_t timeout_ms) {
+    uint32_t bit_time = 8; // 8μs for 115200 baud
+    uint32_t start_time = furi_get_tick();
+    
+    // Wait for start bit (line goes low)
+    while(furi_hal_gpio_read(&gpio_ext_pa6) == true) {  // Pin 14 RX
+        if(furi_get_tick() - start_time > timeout_ms) {
+            return 0; // Timeout
+        }
+        furi_delay_us(1);
+    }
+    
+    // Wait to middle of start bit
+    furi_delay_us(bit_time + (bit_time / 2));
+    
+    // Read data bits (LSB first)
+    uint8_t byte = 0;
+    for(int i = 0; i < 8; i++) {
+        furi_delay_us(bit_time);
+        if(furi_hal_gpio_read(&gpio_ext_pa6)) {
+            byte |= (1 << i);
+        }
+    }
+    
+    // Wait for stop bit
+    furi_delay_us(bit_time);
+    
+    return byte;
+}
+
+static bool cec_remote_uart_receive(CECRemoteApp* app, char* buffer, size_t buffer_size, uint32_t timeout_ms) {
+    if(!app->uart_initialized) {
+        return false;
+    }
+    
+    size_t bytes_received = 0;
+    uint32_t start_time = furi_get_tick();
+    
+    while(bytes_received < buffer_size - 1) {
+        if(furi_get_tick() - start_time > timeout_ms) {
+            break;
+        }
+        
+        uint8_t byte = uart_receive_byte(100); // 100ms timeout per byte
+        if(byte == 0) continue; // Timeout, try again
+        
+        if(byte == '\n') {
+            buffer[bytes_received] = '\0';
+            FURI_LOG_I(TAG, "Received UART: %s", buffer);
+            return true;
+        } else if(byte >= 32 && byte <= 126) { // Printable characters
+            buffer[bytes_received++] = byte;
+        }
+    }
+    
+    buffer[bytes_received] = '\0';
+    return bytes_received > 0;
+}
+
+static bool cec_remote_uart_send(CECRemoteApp* app, const char* data) {
+    if(!app->uart_initialized) {
+        return false;
+    }
+    
+    FURI_LOG_I(TAG, "Sending UART: %s", data);
+    
+    // Send each character
+    for(size_t i = 0; i < strlen(data); i++) {
+        uart_send_byte(data[i]);
+    }
+    
+    // Send newline
+    uart_send_byte('\n');
+    
+    return true;
+}
+
+// Communication function - sends commands and waits for real responses
+static bool cec_remote_send_command(CECRemoteApp* app, const char* command) {
+    FURI_LOG_I(TAG, "Sending command: %s", command);
+    
+    if(!cec_remote_uart_send(app, command)) {
+        strcpy(app->result_buffer, "ERROR: UART send failed");
+        return false;
+    }
+    
+    // Wait for real response
+    if(!cec_remote_uart_receive(app, app->result_buffer, sizeof(app->result_buffer), 5000)) {
+        strcpy(app->result_buffer, "ERROR: No response from Pi");
+        return false;
+    }
+    
+    return true;
+}
+
+// Menu callback
+static void cec_remote_menu_callback(void* context, uint32_t index) {
+    CECRemoteApp* app = context;
+    
+    switch(index) {
+        case CECRemoteMenuPowerOn:
+            strncpy(app->text_buffer, "{\"command\":\"POWER_ON\"}", sizeof(app->text_buffer) - 1);
+            app->text_buffer[sizeof(app->text_buffer) - 1] = '\0';
+            scene_manager_next_scene(app->scene_manager, CECRemoteSceneResult);
+            break;
+        case CECRemoteMenuPowerOff:
+            strncpy(app->text_buffer, "{\"command\":\"POWER_OFF\"}", sizeof(app->text_buffer) - 1);
+            app->text_buffer[sizeof(app->text_buffer) - 1] = '\0';
+            scene_manager_next_scene(app->scene_manager, CECRemoteSceneResult);
+            break;
+        case CECRemoteMenuScan:
+            strncpy(app->text_buffer, "{\"command\":\"SCAN\"}", sizeof(app->text_buffer) - 1);
+            app->text_buffer[sizeof(app->text_buffer) - 1] = '\0';
+            scene_manager_next_scene(app->scene_manager, CECRemoteSceneResult);
+            break;
+        case CECRemoteMenuStatus:
+            strncpy(app->text_buffer, "{\"command\":\"STATUS\"}", sizeof(app->text_buffer) - 1);
+            app->text_buffer[sizeof(app->text_buffer) - 1] = '\0';
+            scene_manager_next_scene(app->scene_manager, CECRemoteSceneResult);
+            break;
+        case CECRemoteMenuCustom:
+            scene_manager_next_scene(app->scene_manager, CECRemoteSceneCustomCommand);
+            break;
+    }
+}
+
+// Text input callback
+static void cec_remote_text_input_callback(void* context) {
+    CECRemoteApp* app = context;
+    
+    const size_t max_custom_cmd_len = 50;
+    
+    size_t cmd_len = strlen(app->custom_command);
+    if(cmd_len > max_custom_cmd_len) {
+        app->custom_command[max_custom_cmd_len] = '\0';
+    }
+    
+    snprintf(app->text_buffer, sizeof(app->text_buffer),
+             "{\"command\":\"CUSTOM\",\"cec_command\":\"%.50s\"}", 
+             app->custom_command);
+    
+    scene_manager_next_scene(app->scene_manager, CECRemoteSceneResult);
+}
+
+// Scene implementations
+void cec_remote_scene_start_on_enter(void* context) {
+    CECRemoteApp* app = context;
+    
+    popup_set_header(app->popup, "CEC Remote", 64, 10, AlignCenter, AlignTop);
+    popup_set_text(app->popup, "Connecting to Pi...", 64, 32, AlignCenter, AlignCenter);
+    view_dispatcher_switch_to_view(app->view_dispatcher, CECRemoteViewPopup);
+    
+    // Initialize UART
+    if(cec_remote_uart_init(app)) {
+        furi_delay_ms(500);
+        
+        // Test real connection with PING
+        if(cec_remote_uart_send(app, "{\"command\":\"PING\"}")) {
+            char response[256];
+            if(cec_remote_uart_receive(app, response, sizeof(response), 3000)) {
+                // Got response - check if it's valid JSON with success
+                if(strstr(response, "success") || strstr(response, "pong")) {
+                    app->is_connected = true;
+                    notification_message(app->notifications, &sequence_success);
+                    scene_manager_next_scene(app->scene_manager, CECRemoteSceneMenu);
+                    return;
+                }
+            }
+        }
+    }
+    
+    // Real connection failed
+    app->is_connected = false;
+    popup_set_header(app->popup, "Connection Failed", 64, 10, AlignCenter, AlignTop);
+    popup_set_text(app->popup, "No response from Pi\nPress Back to exit", 64, 32, AlignCenter, AlignCenter);
+    notification_message(app->notifications, &sequence_error);
+}
+
+bool cec_remote_scene_start_on_event(void* context, SceneManagerEvent event) {
+    CECRemoteApp* app = context;
+    bool consumed = false;
+    
+    if(event.type == SceneManagerEventTypeBack) {
+        // Exit the app from start scene
+        view_dispatcher_stop(app->view_dispatcher);
+        consumed = true;
+    }
+    
+    return consumed;
+}
+
+void cec_remote_scene_start_on_exit(void* context) {
+    CECRemoteApp* app = context;
+    popup_reset(app->popup);
+}
+
+void cec_remote_scene_menu_on_enter(void* context) {
+    CECRemoteApp* app = context;
+    
+    submenu_reset(app->submenu);
+    submenu_set_header(app->submenu, "CEC Remote Control");
+    
+    submenu_add_item(app->submenu, "Power ON", CECRemoteMenuPowerOn, cec_remote_menu_callback, app);
+    submenu_add_item(app->submenu, "Power OFF", CECRemoteMenuPowerOff, cec_remote_menu_callback, app);
+    submenu_add_item(app->submenu, "Scan Devices", CECRemoteMenuScan, cec_remote_menu_callback, app);
+    submenu_add_item(app->submenu, "Check Status", CECRemoteMenuStatus, cec_remote_menu_callback, app);
+    submenu_add_item(app->submenu, "Custom Command", CECRemoteMenuCustom, cec_remote_menu_callback, app);
+    
+    view_dispatcher_switch_to_view(app->view_dispatcher, CECRemoteViewSubmenu);
+}
+
+bool cec_remote_scene_menu_on_event(void* context, SceneManagerEvent event) {
+    UNUSED(context);
+    UNUSED(event);
+    return false;
+}
+
+void cec_remote_scene_menu_on_exit(void* context) {
+    CECRemoteApp* app = context;
+    submenu_reset(app->submenu);
+}
+
+void cec_remote_scene_custom_on_enter(void* context) {
+    CECRemoteApp* app = context;
+    
+    text_input_reset(app->text_input);
+    text_input_set_header_text(app->text_input, "Enter CEC Command:");
+    text_input_set_result_callback(
+        app->text_input,
+        cec_remote_text_input_callback,
+        app,
+        app->custom_command,
+        sizeof(app->custom_command),
+        true);
+    
+    view_dispatcher_switch_to_view(app->view_dispatcher, CECRemoteViewTextInput);
+}
+
+bool cec_remote_scene_custom_on_event(void* context, SceneManagerEvent event) {
+    UNUSED(context);
+    UNUSED(event);
+    return false;
+}
+
+void cec_remote_scene_custom_on_exit(void* context) {
+    CECRemoteApp* app = context;
+    text_input_reset(app->text_input);
+}
+
+void cec_remote_scene_result_on_enter(void* context) {
+    CECRemoteApp* app = context;
+    
+    memset(app->result_buffer, 0, sizeof(app->result_buffer));
+    
+    popup_set_header(app->popup, "Sending...", 64, 10, AlignCenter, AlignTop);
+    popup_set_text(app->popup, "Please wait...", 64, 32, AlignCenter, AlignCenter);
+    view_dispatcher_switch_to_view(app->view_dispatcher, CECRemoteViewPopup);
+    
+    if(cec_remote_send_command(app, app->text_buffer)) {
+        popup_set_header(app->popup, "Success", 64, 10, AlignCenter, AlignTop);
+        popup_set_text(app->popup, app->result_buffer, 64, 32, AlignCenter, AlignCenter);
+        notification_message(app->notifications, &sequence_success);
+    } else {
+        popup_set_header(app->popup, "Failed", 64, 10, AlignCenter, AlignTop);
+        popup_set_text(app->popup, app->result_buffer, 64, 32, AlignCenter, AlignCenter);
+        notification_message(app->notifications, &sequence_error);
+    }
+}
+
+bool cec_remote_scene_result_on_event(void* context, SceneManagerEvent event) {
+    CECRemoteApp* app = context;
+    bool consumed = false;
+    
+    if(event.type == SceneManagerEventTypeBack) {
+        scene_manager_previous_scene(app->scene_manager);
+        consumed = true;
+    }
+    
+    return consumed;
+}
+
+void cec_remote_scene_result_on_exit(void* context) {
+    CECRemoteApp* app = context;
+    popup_reset(app->popup);
+}
+
+// View dispatcher callbacks
+static bool cec_remote_view_dispatcher_navigation_event_callback(void* context) {
+    CECRemoteApp* app = context;
+    return scene_manager_handle_back_event(app->scene_manager);
+}
+
+static bool cec_remote_view_dispatcher_custom_event_callback(void* context, uint32_t event) {
+    CECRemoteApp* app = context;
+    return scene_manager_handle_custom_event(app->scene_manager, event);
+}
+
+// Scene handlers
+void (*const cec_remote_scene_on_enter_handlers[])(void*) = {
+    cec_remote_scene_start_on_enter,
+    cec_remote_scene_menu_on_enter,
+    cec_remote_scene_custom_on_enter,
+    cec_remote_scene_result_on_enter,
+};
+
+bool (*const cec_remote_scene_on_event_handlers[])(void*, SceneManagerEvent) = {
+    cec_remote_scene_start_on_event,
+    cec_remote_scene_menu_on_event,
+    cec_remote_scene_custom_on_event,
+    cec_remote_scene_result_on_event,
+};
+
+void (*const cec_remote_scene_on_exit_handlers[])(void*) = {
+    cec_remote_scene_start_on_exit,
+    cec_remote_scene_menu_on_exit,
+    cec_remote_scene_custom_on_exit,
+    cec_remote_scene_result_on_exit,
+};
+
+const SceneManagerHandlers cec_remote_scene_handlers = {
+    .on_enter_handlers = cec_remote_scene_on_enter_handlers,
+    .on_event_handlers = cec_remote_scene_on_event_handlers,
+    .on_exit_handlers = cec_remote_scene_on_exit_handlers,
+    .scene_num = CECRemoteSceneNum,
+};
+
+// App allocation and deallocation
+static CECRemoteApp* cec_remote_app_alloc(void) {
+    CECRemoteApp* app = malloc(sizeof(CECRemoteApp));
+    
+    memset(app->text_buffer, 0, sizeof(app->text_buffer));
+    memset(app->custom_command, 0, sizeof(app->custom_command));
+    memset(app->result_buffer, 0, sizeof(app->result_buffer));
     
     app->gui = furi_record_open(RECORD_GUI);
-    app->view_dispatcher = view_dispatcher_alloc();
-    app->popup = popup_alloc();
+    app->notifications = furi_record_open(RECORD_NOTIFICATION);
     
-    view_dispatcher_set_navigation_event_callback(app->view_dispatcher, gpio_test_back_event_callback);
+    app->view_dispatcher = view_dispatcher_alloc();
+    view_dispatcher_set_event_callback_context(app->view_dispatcher, app);
+    view_dispatcher_set_navigation_event_callback(
+        app->view_dispatcher, cec_remote_view_dispatcher_navigation_event_callback);
+    view_dispatcher_set_custom_event_callback(
+        app->view_dispatcher, cec_remote_view_dispatcher_custom_event_callback);
     view_dispatcher_attach_to_gui(app->view_dispatcher, app->gui, ViewDispatcherTypeFullscreen);
     
-    popup_set_header(app->popup, "GPIO Test", 64, 10, AlignCenter, AlignTop);
-    popup_set_text(app->popup, "Testing GPIO pins...\nWatch Pi logs!\nPress Back when done", 64, 32, AlignCenter, AlignCenter);
+    app->scene_manager = scene_manager_alloc(&cec_remote_scene_handlers, app);
     
-    view_dispatcher_add_view(app->view_dispatcher, 0, popup_get_view(app->popup));
-    view_dispatcher_switch_to_view(app->view_dispatcher, 0);
+    app->submenu = submenu_alloc();
+    view_dispatcher_add_view(app->view_dispatcher, CECRemoteViewSubmenu, submenu_get_view(app->submenu));
+    
+    app->text_input = text_input_alloc();
+    view_dispatcher_add_view(app->view_dispatcher, CECRemoteViewTextInput, text_input_get_view(app->text_input));
+    
+    app->popup = popup_alloc();
+    view_dispatcher_add_view(app->view_dispatcher, CECRemoteViewPopup, popup_get_view(app->popup));
+    
+    app->is_connected = false;
+    app->uart_initialized = false;
     
     return app;
 }
 
-static void gpio_test_app_free(SimpleGPIOApp* app) {
-    view_dispatcher_remove_view(app->view_dispatcher, 0);
+static void cec_remote_app_free(CECRemoteApp* app) {
+    furi_assert(app);
+    
+    if(app->uart_initialized) {
+        cec_remote_uart_deinit(app);
+    }
+    
+    view_dispatcher_remove_view(app->view_dispatcher, CECRemoteViewSubmenu);
+    submenu_free(app->submenu);
+    
+    view_dispatcher_remove_view(app->view_dispatcher, CECRemoteViewTextInput);
+    text_input_free(app->text_input);
+    
+    view_dispatcher_remove_view(app->view_dispatcher, CECRemoteViewPopup);
     popup_free(app->popup);
+    
+    scene_manager_free(app->scene_manager);
     view_dispatcher_free(app->view_dispatcher);
+    
+    furi_record_close(RECORD_NOTIFICATION);
     furi_record_close(RECORD_GUI);
+    
     free(app);
 }
 
+// Main application entry point
 int32_t cec_remote_app(void* p) {
     UNUSED(p);
     
-    SimpleGPIOApp* app = gpio_test_app_alloc();
+    CECRemoteApp* app = cec_remote_app_alloc();
     
-    // Start GPIO test in background
-    FuriThread* test_thread = furi_thread_alloc();
-    furi_thread_set_name(test_thread, "GPIOTest");
-    furi_thread_set_stack_size(test_thread, 1024);
-    furi_thread_set_callback(test_thread, gpio_test_task);
-    furi_thread_start(test_thread);
+    scene_manager_next_scene(app->scene_manager, CECRemoteSceneStart);
     
     view_dispatcher_run(app->view_dispatcher);
     
-    furi_thread_free(test_thread);
-    gpio_test_app_free(app);
+    cec_remote_app_free(app);
     
     return 0;
 }
