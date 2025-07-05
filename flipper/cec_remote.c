@@ -13,7 +13,7 @@ typedef struct {
 } SimpleGPIOApp;
 
 // Simple GPIO test - just blink pin 13
-static void gpio_test_task(void* context) {
+static int32_t gpio_test_task(void* context) {
     UNUSED(context);
     
     // Try different pin definitions to see what works
@@ -42,6 +42,8 @@ static void gpio_test_task(void* context) {
         // Wait between pins
         furi_delay_ms(500);
     }
+    
+    return 0;
 }
 
 static bool gpio_test_back_event_callback(void* context) {
