@@ -9,7 +9,7 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("cec_control")
 
-def execute_cec_command(command, timeout=5):
+def execute_cec_command(command, timeout=15):
     """Execute CEC command and return result"""
     try:
         logger.info(f"Executing CEC command: {command}")
