@@ -6,8 +6,14 @@
 #include <gui/modules/text_input.h>
 #include <gui/modules/popup.h>
 #include <notification/notification_messages.h>
+#include <furi_hal_uart.h>
+#include <furi_hal_console.h>
+#include <stream/stream.h>
+#include <toolbox/stream/string_stream.h>
 
 #define TAG "CECRemote"
+#define UART_CH (FuriHalUartIdUSART1)
+#define UART_BAUD (115200)
 
 typedef enum {
     CECRemoteViewSubmenu,
@@ -41,9 +47,14 @@ typedef struct {
     NotificationApp* notifications;
     
     char text_buffer[256];
-    char custom_command[64];  // Smaller buffer for custom commands
+    char custom_command[64];
     char result_buffer[1024];
     bool is_connected;
+    
+    // UART communication
+    FuriStreamBuffer* uart_stream;
+    FuriThread* uart_thread;
+    bool uart_thread_running;
 } CECRemoteApp;
 
 // Forward declarations
@@ -60,21 +71,77 @@ void cec_remote_scene_result_on_enter(void* context);
 bool cec_remote_scene_result_on_event(void* context, SceneManagerEvent event);
 void cec_remote_scene_result_on_exit(void* context);
 
-// Communication functions
-static bool cec_remote_send_command(CECRemoteApp* app, const char* command) {
+// UART Communication Functions
+static void uart_on_irq_cb(UartIrqEvent ev, uint8_t data, void* context) {
+    CECRemoteApp* app = (CECRemoteApp*)context;
+    
+    if(ev == UartIrqEventRXNE) {
+        furi_stream_buffer_send(app->uart_stream, &data, 1, 0);
+    }
+}
+
+static bool cec_remote_uart_init(CECRemoteApp* app) {
+    app->uart_stream = furi_stream_buffer_alloc(1024, 1);
+    
+    furi_hal_uart_init(UART_CH, UART_BAUD);
+    furi_hal_uart_set_irq_cb(UART_CH, uart_on_irq_cb, app);
+    
+    return true;
+}
+
+static void cec_remote_uart_deinit(CECRemoteApp* app) {
+    furi_hal_uart_deinit(UART_CH);
+    furi_stream_buffer_free(app->uart_stream);
+}
+
+static bool cec_remote_uart_send(CECRemoteApp* app, const char* data) {
     if(!app->is_connected) {
         return false;
     }
     
-    FURI_LOG_I(TAG, "Sending command: %s", command);
+    FURI_LOG_I(TAG, "Sending UART: %s", data);
+    furi_hal_uart_tx(UART_CH, (uint8_t*)data, strlen(data));
+    furi_hal_uart_tx(UART_CH, (uint8_t*)"\n", 1);
+    
     return true;
 }
 
-static bool cec_remote_wait_response(CECRemoteApp* app, uint32_t timeout_ms) {
-    UNUSED(app);
-    UNUSED(timeout_ms);
+static bool cec_remote_uart_receive(CECRemoteApp* app, char* buffer, size_t buffer_size, uint32_t timeout_ms) {
+    size_t bytes_received = 0;
+    uint32_t start_time = furi_get_tick();
     
-    furi_delay_ms(500);
+    while(bytes_received < buffer_size - 1) {
+        if(furi_get_tick() - start_time > timeout_ms) {
+            break;
+        }
+        
+        uint8_t byte;
+        if(furi_stream_buffer_receive(app->uart_stream, &byte, 1, 10) == 1) {
+            if(byte == '\n') {
+                buffer[bytes_received] = '\0';
+                FURI_LOG_I(TAG, "Received UART: %s", buffer);
+                return true;
+            } else if(byte >= 32 && byte <= 126) { // Printable characters
+                buffer[bytes_received++] = byte;
+            }
+        }
+    }
+    
+    buffer[bytes_received] = '\0';
+    return bytes_received > 0;
+}
+
+static bool cec_remote_send_command(CECRemoteApp* app, const char* command) {
+    if(!cec_remote_uart_send(app, command)) {
+        return false;
+    }
+    
+    // Wait for response
+    if(!cec_remote_uart_receive(app, app->result_buffer, sizeof(app->result_buffer), 10000)) {
+        snprintf(app->result_buffer, sizeof(app->result_buffer), "No response from Pi");
+        return false;
+    }
+    
     return true;
 }
 
@@ -113,9 +180,6 @@ static void cec_remote_menu_callback(void* context, uint32_t index) {
 static void cec_remote_text_input_callback(void* context) {
     CECRemoteApp* app = context;
     
-    // Simple and safe: just truncate the custom command if it's too long
-    // Maximum safe length for custom command in JSON is about 200 chars
-    // But we'll be extra safe and limit to 50 chars
     const size_t max_custom_cmd_len = 50;
     
     size_t cmd_len = strlen(app->custom_command);
@@ -123,7 +187,6 @@ static void cec_remote_text_input_callback(void* context) {
         app->custom_command[max_custom_cmd_len] = '\0';
     }
     
-    // Format the JSON command safely
     snprintf(app->text_buffer, sizeof(app->text_buffer),
              "{\"command\":\"CUSTOM\",\"cec_command\":\"%.50s\"}", 
              app->custom_command);
@@ -136,20 +199,41 @@ void cec_remote_scene_start_on_enter(void* context) {
     CECRemoteApp* app = context;
     
     popup_set_header(app->popup, "CEC Remote", 64, 10, AlignCenter, AlignTop);
-    popup_set_text(app->popup, "Connecting to RPi...", 64, 32, AlignCenter, AlignCenter);
+    popup_set_text(app->popup, "Connecting to Pi...", 64, 32, AlignCenter, AlignCenter);
     view_dispatcher_switch_to_view(app->view_dispatcher, CECRemoteViewPopup);
     
-    furi_delay_ms(1000);
+    // Initialize UART
+    if(cec_remote_uart_init(app)) {
+        furi_delay_ms(1000);
+        
+        // Test connection with PING
+        if(cec_remote_uart_send(app, "{\"command\":\"PING\"}")) {
+            char response[256];
+            if(cec_remote_uart_receive(app, response, sizeof(response), 3000)) {
+                app->is_connected = true;
+                notification_message(app->notifications, &sequence_success);
+                scene_manager_next_scene(app->scene_manager, CECRemoteSceneMenu);
+                return;
+            }
+        }
+    }
     
-    app->is_connected = true;
-    notification_message(app->notifications, &sequence_success);
-    scene_manager_next_scene(app->scene_manager, CECRemoteSceneMenu);
+    // Connection failed
+    popup_set_header(app->popup, "Connection Failed", 64, 10, AlignCenter, AlignTop);
+    popup_set_text(app->popup, "Check Pi connection\nPress Back", 64, 32, AlignCenter, AlignCenter);
+    notification_message(app->notifications, &sequence_error);
 }
 
 bool cec_remote_scene_start_on_event(void* context, SceneManagerEvent event) {
-    UNUSED(context);
-    UNUSED(event);
-    return false;
+    CECRemoteApp* app = context;
+    bool consumed = false;
+    
+    if(event.type == SceneManagerEventTypeBack) {
+        scene_manager_previous_scene(app->scene_manager);
+        consumed = true;
+    }
+    
+    return consumed;
 }
 
 void cec_remote_scene_start_on_exit(void* context) {
@@ -220,15 +304,9 @@ void cec_remote_scene_result_on_enter(void* context) {
     view_dispatcher_switch_to_view(app->view_dispatcher, CECRemoteViewPopup);
     
     if(cec_remote_send_command(app, app->text_buffer)) {
-        if(cec_remote_wait_response(app, 5000)) {
-            popup_set_header(app->popup, "Success!", 64, 10, AlignCenter, AlignTop);
-            popup_set_text(app->popup, "Command sent\nPress Back", 64, 32, AlignCenter, AlignCenter);
-            notification_message(app->notifications, &sequence_success);
-        } else {
-            popup_set_header(app->popup, "Timeout", 64, 10, AlignCenter, AlignTop);
-            popup_set_text(app->popup, "No response\nPress Back", 64, 32, AlignCenter, AlignCenter);
-            notification_message(app->notifications, &sequence_error);
-        }
+        popup_set_header(app->popup, "Response", 64, 10, AlignCenter, AlignTop);
+        popup_set_text(app->popup, app->result_buffer, 64, 32, AlignCenter, AlignCenter);
+        notification_message(app->notifications, &sequence_success);
     } else {
         popup_set_header(app->popup, "Failed", 64, 10, AlignCenter, AlignTop);
         popup_set_text(app->popup, "Check connection\nPress Back", 64, 32, AlignCenter, AlignCenter);
@@ -324,12 +402,19 @@ static CECRemoteApp* cec_remote_app_alloc(void) {
     view_dispatcher_add_view(app->view_dispatcher, CECRemoteViewPopup, popup_get_view(app->popup));
     
     app->is_connected = false;
+    app->uart_stream = NULL;
+    app->uart_thread = NULL;
+    app->uart_thread_running = false;
     
     return app;
 }
 
 static void cec_remote_app_free(CECRemoteApp* app) {
     furi_assert(app);
+    
+    if(app->is_connected) {
+        cec_remote_uart_deinit(app);
+    }
     
     view_dispatcher_remove_view(app->view_dispatcher, CECRemoteViewSubmenu);
     submenu_free(app->submenu);
