@@ -21,12 +21,39 @@ apt install -y cec-utils python3-pip python3-venv git
 
 echo "🔧 Configuring USB gadget mode..."
 
-if ! grep -q "^dtoverlay=dwc2" /boot/config.txt; then
-  echo "dtoverlay=dwc2" >> /boot/config.txt
+# Detect Pi model and use correct USB overlay
+PI_MODEL=$(cat /proc/device-tree/model)
+echo "Detected: $PI_MODEL"
+
+if [[ "$PI_MODEL" == *"Pi Zero 2"* ]]; then
+    # Pi Zero 2 W uses dwc_otg
+    USB_OVERLAY="dwc_otg"
+    USB_MODULE="dwc_otg"
+    echo "Using dwc_otg overlay for Pi Zero 2 W"
+else
+    # Other Pi models use dwc2
+    USB_OVERLAY="dwc2"
+    USB_MODULE="libcomposite"
+    echo "Using dwc2 overlay for this Pi model"
 fi
 
+# Add USB overlay to boot config
+if ! grep -q "^dtoverlay=$USB_OVERLAY" /boot/config.txt; then
+    # Remove any existing USB overlays first
+    sed -i '/^dtoverlay=dwc/d' /boot/config.txt
+    echo "dtoverlay=$USB_OVERLAY" >> /boot/config.txt
+    echo "✅ Added $USB_OVERLAY overlay to boot config"
+fi
+
+# Add required modules
 if ! grep -q "^libcomposite" /etc/modules; then
-  echo "libcomposite" >> /etc/modules
+    echo "libcomposite" >> /etc/modules
+    echo "✅ Added libcomposite to modules"
+fi
+
+if [[ "$USB_MODULE" == "dwc_otg" ]] && ! grep -q "^dwc_otg" /etc/modules; then
+    echo "dwc_otg" >> /etc/modules
+    echo "✅ Added dwc_otg to modules"
 fi
 
 INSTALL_DIR="/opt/cec-flipper"
