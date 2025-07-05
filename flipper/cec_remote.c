@@ -8,7 +8,7 @@
 #include <gui/modules/text_input.h>
 #include <gui/modules/popup.h>
 #include <notification/notification_messages.h>
-#include <furi_hal_gpio.h>
+#include <furi_hal_serial.h>
 #include <expansion/expansion.h>
 #include <string.h>
 #include <stdio.h>
@@ -51,6 +51,10 @@ typedef struct {
     char result_buffer[1024];
     bool is_connected;
     bool uart_initialized;
+    
+    FuriHalSerialHandle* serial_handle;
+    FuriStreamBuffer* rx_stream;
+    FuriThread* worker_thread;
 } CECRemoteApp;
 
 // Forward declarations
@@ -67,103 +71,85 @@ void cec_remote_scene_result_on_enter(void* context);
 bool cec_remote_scene_result_on_event(void* context, SceneManagerEvent event);
 void cec_remote_scene_result_on_exit(void* context);
 
-// Simple UART Communication using GPIO bit-banging
-static bool cec_remote_uart_init(CECRemoteApp* app) {
-    // Initialize GPIO pins for UART (Pin 13 = TX, Pin 14 = RX)
-    // Pin 13 confirmed working from GPIO test!
-    furi_hal_gpio_init_simple(&gpio_ext_pa7, GpioModeOutputPushPull);  // Pin 13 TX
-    furi_hal_gpio_init_simple(&gpio_ext_pa6, GpioModeInput);          // Pin 14 RX
+// UART communication using hardware USART (proper method)
+static void uart_rx_callback(FuriHalSerialHandle* handle, FuriHalSerialRxEvent event, void* context) {
+    CECRemoteApp* app = context;
     
-    // Set TX line high (idle state)
-    furi_hal_gpio_write(&gpio_ext_pa7, true);
+    if(event == FuriHalSerialRxEventData) {
+        uint8_t data = furi_hal_serial_async_rx(handle);
+        furi_stream_buffer_send(app->rx_stream, &data, 1, 0);
+        furi_thread_flags_set(furi_thread_get_id(app->worker_thread), 1);
+    }
+}
+
+static int32_t uart_worker(void* context) {
+    CECRemoteApp* app = context;
+    
+    while(true) {
+        uint32_t events = furi_thread_flags_wait(1, FuriFlagWaitAny, FuriWaitForever);
+        if(events & 1) {
+            // Process incoming data
+            uint8_t data[256];
+            size_t bytes_read = furi_stream_buffer_receive(app->rx_stream, data, sizeof(data) - 1, 0);
+            
+            if(bytes_read > 0) {
+                data[bytes_read] = '\0';
+                FURI_LOG_I(TAG, "Received: %s", (char*)data);
+            }
+        }
+    }
+    
+    return 0;
+}
+
+static bool cec_remote_uart_init(CECRemoteApp* app) {
+    // Use hardware USART - this is the correct way!
+    app->serial_handle = furi_hal_serial_control_acquire(FuriHalSerialIdUsart);
+    if(!app->serial_handle) {
+        FURI_LOG_E(TAG, "Failed to acquire serial handle");
+        return false;
+    }
+    
+    furi_hal_serial_init(app->serial_handle, 115200);
+    
+    // Create stream buffer for incoming data
+    app->rx_stream = furi_stream_buffer_alloc(1024, 1);
+    
+    // Create worker thread
+    app->worker_thread = furi_thread_alloc();
+    furi_thread_set_name(app->worker_thread, "UARTWorker");
+    furi_thread_set_stack_size(app->worker_thread, 1024);
+    furi_thread_set_callback(app->worker_thread, uart_worker);
+    furi_thread_set_context(app->worker_thread, app);
+    furi_thread_start(app->worker_thread);
+    
+    // Set RX callback
+    furi_hal_serial_async_rx_start(app->serial_handle, uart_rx_callback, app, false);
     
     app->uart_initialized = true;
+    FURI_LOG_I(TAG, "UART initialized successfully");
     return true;
 }
 
 static void cec_remote_uart_deinit(CECRemoteApp* app) {
     if(app->uart_initialized) {
-        furi_hal_gpio_init_simple(&gpio_ext_pa7, GpioModeAnalog);  // Pin 13
-        furi_hal_gpio_init_simple(&gpio_ext_pa6, GpioModeAnalog);  // Pin 14
+        furi_hal_serial_async_rx_stop(app->serial_handle);
+        
+        if(app->worker_thread) {
+            furi_thread_flags_set(furi_thread_get_id(app->worker_thread), 2);
+            furi_thread_join(app->worker_thread);
+            furi_thread_free(app->worker_thread);
+        }
+        
+        if(app->rx_stream) {
+            furi_stream_buffer_free(app->rx_stream);
+        }
+        
+        furi_hal_serial_deinit(app->serial_handle);
+        furi_hal_serial_control_release(app->serial_handle);
+        
         app->uart_initialized = false;
     }
-}
-
-static void uart_send_byte(uint8_t byte) {
-    uint32_t bit_time = 8; // 8μs for 115200 baud (Pin 13 confirmed working!)
-    
-    // Start bit (low)
-    furi_hal_gpio_write(&gpio_ext_pa7, false);
-    furi_delay_us(bit_time);
-    
-    // Data bits (LSB first)
-    for(int i = 0; i < 8; i++) {
-        furi_hal_gpio_write(&gpio_ext_pa7, (byte >> i) & 1);
-        furi_delay_us(bit_time);
-    }
-    
-    // Stop bit (high)
-    furi_hal_gpio_write(&gpio_ext_pa7, true);
-    furi_delay_us(bit_time * 2); // Extra stop time for stability
-}
-
-static uint8_t uart_receive_byte(uint32_t timeout_ms) {
-    uint32_t bit_time = 8; // 8μs for 115200 baud
-    uint32_t start_time = furi_get_tick();
-    
-    // Wait for start bit (line goes low)
-    while(furi_hal_gpio_read(&gpio_ext_pa6) == true) {  // Pin 14 RX
-        if(furi_get_tick() - start_time > timeout_ms) {
-            return 0; // Timeout
-        }
-        furi_delay_us(1);
-    }
-    
-    // Wait to middle of start bit
-    furi_delay_us(bit_time + (bit_time / 2));
-    
-    // Read data bits (LSB first)
-    uint8_t byte = 0;
-    for(int i = 0; i < 8; i++) {
-        furi_delay_us(bit_time);
-        if(furi_hal_gpio_read(&gpio_ext_pa6)) {
-            byte |= (1 << i);
-        }
-    }
-    
-    // Wait for stop bit
-    furi_delay_us(bit_time);
-    
-    return byte;
-}
-
-static bool cec_remote_uart_receive(CECRemoteApp* app, char* buffer, size_t buffer_size, uint32_t timeout_ms) {
-    if(!app->uart_initialized) {
-        return false;
-    }
-    
-    size_t bytes_received = 0;
-    uint32_t start_time = furi_get_tick();
-    
-    while(bytes_received < buffer_size - 1) {
-        if(furi_get_tick() - start_time > timeout_ms) {
-            break;
-        }
-        
-        uint8_t byte = uart_receive_byte(100); // 100ms timeout per byte
-        if(byte == 0) continue; // Timeout, try again
-        
-        if(byte == '\n') {
-            buffer[bytes_received] = '\0';
-            FURI_LOG_I(TAG, "Received UART: %s", buffer);
-            return true;
-        } else if(byte >= 32 && byte <= 126) { // Printable characters
-            buffer[bytes_received++] = byte;
-        }
-    }
-    
-    buffer[bytes_received] = '\0';
-    return bytes_received > 0;
 }
 
 static bool cec_remote_uart_send(CECRemoteApp* app, const char* data) {
@@ -171,17 +157,42 @@ static bool cec_remote_uart_send(CECRemoteApp* app, const char* data) {
         return false;
     }
     
-    FURI_LOG_I(TAG, "Sending UART: %s", data);
+    FURI_LOG_I(TAG, "Sending: %s", data);
     
-    // Send each character
-    for(size_t i = 0; i < strlen(data); i++) {
-        uart_send_byte(data[i]);
-    }
-    
-    // Send newline
-    uart_send_byte('\n');
+    // Send data + newline
+    furi_hal_serial_tx(app->serial_handle, (uint8_t*)data, strlen(data));
+    furi_hal_serial_tx(app->serial_handle, (uint8_t*)"\n", 1);
+    furi_hal_serial_tx_wait_complete(app->serial_handle);
     
     return true;
+}
+
+static bool cec_remote_uart_receive(CECRemoteApp* app, char* buffer, size_t buffer_size, uint32_t timeout_ms) {
+    if(!app->uart_initialized) {
+        return false;
+    }
+    
+    uint32_t start_time = furi_get_tick();
+    size_t total_received = 0;
+    
+    while(furi_get_tick() - start_time < timeout_ms && total_received < buffer_size - 1) {
+        uint8_t data[32];
+        size_t bytes_read = furi_stream_buffer_receive(app->rx_stream, data, sizeof(data), 100);
+        
+        if(bytes_read > 0) {
+            for(size_t i = 0; i < bytes_read && total_received < buffer_size - 1; i++) {
+                if(data[i] == '\n') {
+                    buffer[total_received] = '\0';
+                    FURI_LOG_I(TAG, "Complete message received: %s", buffer);
+                    return true;
+                }
+                buffer[total_received++] = data[i];
+            }
+        }
+    }
+    
+    buffer[total_received] = '\0';
+    return total_received > 0;
 }
 
 // Communication function - sends commands and waits for real responses
@@ -465,6 +476,9 @@ static CECRemoteApp* cec_remote_app_alloc(void) {
     
     app->is_connected = false;
     app->uart_initialized = false;
+    app->serial_handle = NULL;
+    app->rx_stream = NULL;
+    app->worker_thread = NULL;
     
     return app;
 }
