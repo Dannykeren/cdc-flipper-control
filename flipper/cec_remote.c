@@ -61,30 +61,14 @@ void cec_remote_scene_result_on_enter(void* context);
 bool cec_remote_scene_result_on_event(void* context, SceneManagerEvent event);
 void cec_remote_scene_result_on_exit(void* context);
 
-// Simple GPIO-based serial communication
+// Communication function - returns actual errors
 static bool cec_remote_send_command(CECRemoteApp* app, const char* command) {
     FURI_LOG_I(TAG, "Sending command: %s", command);
     
-    // For now, simulate successful communication
-    // TODO: Implement actual GPIO serial communication
-    furi_delay_ms(500);
-    
-    // Simulate response based on command
-    if(strstr(command, "PING")) {
-        strcpy(app->result_buffer, "PONG - Pi Connected");
-    } else if(strstr(command, "POWER_ON")) {
-        strcpy(app->result_buffer, "TV Power ON sent");
-    } else if(strstr(command, "POWER_OFF")) {
-        strcpy(app->result_buffer, "TV Power OFF sent");
-    } else if(strstr(command, "SCAN")) {
-        strcpy(app->result_buffer, "Found: Samsung TV\nLG Soundbar");
-    } else if(strstr(command, "STATUS")) {
-        strcpy(app->result_buffer, "TV: ON\nSoundbar: OFF");
-    } else {
-        strcpy(app->result_buffer, "Command sent to Pi");
-    }
-    
-    return true;
+    // TODO: Implement actual UART communication here
+    // For now, return error since UART is not implemented
+    strcpy(app->result_buffer, "ERROR: UART not implemented yet");
+    return false;
 }
 
 // Menu callback
@@ -146,10 +130,11 @@ void cec_remote_scene_start_on_enter(void* context) {
     
     furi_delay_ms(1000);
     
-    // For now, always assume connection works
-    app->is_connected = true;
-    notification_message(app->notifications, &sequence_success);
-    scene_manager_next_scene(app->scene_manager, CECRemoteSceneMenu);
+    // For now, connection always fails since UART is not implemented
+    app->is_connected = false;
+    popup_set_header(app->popup, "Connection Failed", 64, 10, AlignCenter, AlignTop);
+    popup_set_text(app->popup, "UART not implemented\nPress Back to exit", 64, 32, AlignCenter, AlignCenter);
+    notification_message(app->notifications, &sequence_error);
 }
 
 bool cec_remote_scene_start_on_event(void* context, SceneManagerEvent event) {
@@ -157,7 +142,8 @@ bool cec_remote_scene_start_on_event(void* context, SceneManagerEvent event) {
     bool consumed = false;
     
     if(event.type == SceneManagerEventTypeBack) {
-        scene_manager_previous_scene(app->scene_manager);
+        // Exit the app completely
+        view_dispatcher_stop(app->view_dispatcher);
         consumed = true;
     }
     
