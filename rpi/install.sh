@@ -42,7 +42,7 @@ if ! grep -q "^dtoverlay=$USB_OVERLAY" /boot/config.txt && ! grep -q "^dtoverlay
     sed -i '/^dtoverlay=dwc/d' /boot/config.txt
     if [[ "$USB_OVERLAY" == "dwc_otg" ]]; then
        echo "dtoverlay=$USB_OVERLAY,dr_mode=otg" >> /boot/config.txt
-    else
+       echo "dwc_otg.lpm_enable=0 dwc_otg.fiq_enable=1 dwc_otg.fiq_fsm_enable=1 dwc_otg.nak_holdoff=1" >> /boot/cmdline.txt    else
        echo "dtoverlay=$USB_OVERLAY" >> /boot/config.txt
     fi
     echo "✅ Added $USB_OVERLAY overlay to boot config"
