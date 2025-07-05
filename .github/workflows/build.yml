@@ -9,34 +9,36 @@ on:
     types: [ published ]
 
 jobs:
-  build-flipper:
+  build-flipper-momentum:
     runs-on: ubuntu-latest
-    name: Build Flipper Zero App
+    name: Build Flipper Zero App (Momentum)
     
     steps:
     - name: Checkout
       uses: actions/checkout@v4
-      with:
-        submodules: recursive
+    
+    - name: Setup ufbt for Momentum
+      run: |
+        pip3 install --upgrade ufbt
+        ufbt update --index-url=https://up.unleashedflip.com/directory.json --channel=dev
     
     - name: Build Flipper Application
-      uses: flipperdevices/flipperzero-ufbt-action@v0.1.2
-      id: build-app
-      with:
-        app-dir: ./flipper
+      run: |
+        cd flipper
+        ufbt build
     
     - name: Upload app artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: cec-remote-flipper-app
-        path: ${{ steps.build-app.outputs.fap-artifacts }}
+        name: cec-remote-flipper-app-momentum
+        path: flipper/dist/*.fap
         retention-days: 30
     
     - name: Upload to release
       if: github.event_name == 'release'
       uses: softprops/action-gh-release@v1
       with:
-        files: ${{ steps.build-app.outputs.fap-artifacts }}
+        files: flipper/dist/*.fap
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
