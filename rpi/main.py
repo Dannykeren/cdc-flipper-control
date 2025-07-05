@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """
 CEC Flipper Control - Main Application
+Multi-interface CEC controller (HTTP, UART, GPIO)
 """
-import serial
-import json
 import time
 import logging
 import sys
 import signal
 import cec_control
+from http.server import HTTPServer
+import threading
 
 logging.basicConfig(
     level=logging.INFO,
@@ -16,145 +17,73 @@ logging.basicConfig(
 )
 logger = logging.getLogger("main")
 
-class CECHandler:
-    def __init__(self, device="/dev/ttyGS0"):
-        self.device = device
-        self.serial_conn = None
+class CECController:
+    def __init__(self):
         self.running = False
+        self.http_server = None
+    
+    def start_http_server(self):
+        """Start HTTP server in background thread"""
+        # Import and start the HTTP server from http_test.py logic
+        from http_test import CECHandler, get_ip_address
         
-    def connect(self):
-        """Connect to USB serial device"""
-        try:
-            self.serial_conn = serial.Serial(self.device, 115200, timeout=1)
-            logger.info(f"Connected to {self.device}")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to connect to {self.device}: {e}")
-            return False
+        ip_address = get_ip_address()
+        self.http_server = HTTPServer(('0.0.0.0', 8080), CECHandler)
+        
+        http_thread = threading.Thread(target=self.http_server.serve_forever)
+        http_thread.daemon = True
+        http_thread.start()
+        
+        logger.info(f"HTTP server running on http://{ip_address}:8080")
     
-    def send_response(self, response):
-        """Send JSON response"""
-        try:
-            json_response = json.dumps(response) + "\n"
-            self.serial_conn.write(json_response.encode())
-            logger.info(f"Sent: {response}")
-        except Exception as e:
-            logger.error(f"Failed to send response: {e}")
+    def start_uart_interface(self):
+        """Future: UART interface for Flipper Zero"""
+        logger.info("UART interface ready (placeholder)")
+        # TODO: Implement UART communication
     
-    def process_command(self, line):
-        """Process incoming JSON command"""
-        try:
-            data = json.loads(line.strip())
-            command = data.get("command", "").upper()
-            
-            logger.info(f"Processing: {command}")
-            
-            if command == "PING":
-                self.send_response({
-                    "command": "PING",
-                    "status": "pong", 
-                    "timestamp": time.time()
-                })
-            elif command == "POWER_ON":
-                result = cec_control.power_on()
-                self.send_response({
-                    "command": "POWER_ON",
-                    "status": "success",
-                    "result": result
-                })
-            elif command == "POWER_OFF":
-                result = cec_control.power_off()
-                self.send_response({
-                    "command": "POWER_OFF",
-                    "status": "success", 
-                    "result": result
-                })
-            elif command == "SCAN":
-                result = cec_control.scan_devices()
-                self.send_response({
-                    "command": "SCAN",
-                    "status": "success",
-                    "result": result
-                })
-            elif command == "STATUS":
-                result = cec_control.get_power_status()
-                self.send_response({
-                    "command": "STATUS",
-                    "status": "success",
-                    "result": result
-                })
-            elif command == "CUSTOM":
-                cec_cmd = data.get("cec_command", "")
-                result = cec_control.send_custom_command(cec_cmd)
-                self.send_response({
-                    "command": "CUSTOM",
-                    "status": "success",
-                    "cec_command": cec_cmd,
-                    "result": result
-                })
-            else:
-                self.send_response({
-                    "command": command,
-                    "status": "error",
-                    "message": f"Unknown command: {command}"
-                })
-                
-        except Exception as e:
-            logger.error(f"Error processing command: {e}")
-            self.send_response({
-                "status": "error",
-                "message": str(e)
-            })
+    def start_gpio_interface(self):
+        """Future: GPIO interface for physical buttons"""
+        logger.info("GPIO interface ready (placeholder)")
+        # TODO: Implement GPIO button handling
     
     def run(self):
-        """Main loop"""
-        if not self.connect():
-            return False
-            
+        """Main application loop"""
         self.running = True
         
-        self.send_response({
-            "status": "ready",
-            "message": "CEC Flipper Control ready"
-        })
+        # Start all interfaces
+        self.start_http_server()
+        self.start_uart_interface()
+        self.start_gpio_interface()
         
-        logger.info("Listening for commands...")
+        logger.info("CEC Controller running with all interfaces")
         
+        # Keep running
         while self.running:
-            try:
-                if self.serial_conn.in_waiting > 0:
-                    line = self.serial_conn.readline().decode().strip()
-                    if line:
-                        self.process_command(line)
-                time.sleep(0.1)
-            except Exception as e:
-                logger.error(f"Error in main loop: {e}")
-                time.sleep(1)
-        
-        return True
+            time.sleep(1)
     
     def stop(self):
-        """Stop the handler"""
+        """Stop all interfaces"""
         self.running = False
-        if self.serial_conn:
-            self.serial_conn.close()
+        if self.http_server:
+            self.http_server.shutdown()
+        logger.info("CEC Controller stopped")
 
 def signal_handler(sig, frame):
-    global handler
+    global controller
     logger.info("Shutting down...")
-    if 'handler' in globals():
-        handler.stop()
+    if 'controller' in globals():
+        controller.stop()
     sys.exit(0)
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
     
-    handler = CECHandler()
+    controller = CECController()
     
     try:
-        handler.run()
+        controller.run()
     except KeyboardInterrupt:
         pass
     finally:
-        handler.stop()
+        controller.stop()
