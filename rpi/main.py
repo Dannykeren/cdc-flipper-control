@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 CEC Flipper Control - Main Application
-Multi-interface CEC controller (HTTP, UART, GPIO)
+Multi-interface CEC controller with Flipper SD card logging
 """
 import time
 import logging
@@ -10,14 +10,63 @@ import signal
 import json
 import threading
 import serial
+import os
 import cec_control
 from http.server import HTTPServer
+from datetime import datetime
 
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger("main")
+
+# Flipper SD card logging
+FLIPPER_LOG_FILE = "/tmp/flipper_cec_log.txt"
+FLIPPER_EXPORT_FILE = "/tmp/flipper_brightsign_export.json"
+
+def write_flipper_log(message):
+    """Write log message to Flipper-accessible file"""
+    try:
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with open(FLIPPER_LOG_FILE, "a") as f:
+            f.write(f"[{timestamp}] {message}\n")
+    except Exception as e:
+        logger.error(f"Failed to write Flipper log: {e}")
+
+def save_flipper_export():
+    """Save BrightSign export to Flipper-accessible file"""
+    try:
+        export_data = cec_control.get_brightsign_export()
+        with open(FLIPPER_EXPORT_FILE, "w") as f:
+            json.dump(export_data, f, indent=2)
+        logger.info(f"BrightSign export saved to {FLIPPER_EXPORT_FILE}")
+    except Exception as e:
+        logger.error(f"Failed to save Flipper export: {e}")
+
+def get_flipper_log():
+    """Get recent Flipper log entries"""
+    try:
+        if os.path.exists(FLIPPER_LOG_FILE):
+            with open(FLIPPER_LOG_FILE, "r") as f:
+                lines = f.readlines()
+            # Return last 20 lines
+            return "".join(lines[-20:]) if lines else "No log entries"
+        else:
+            return "Log file not found"
+    except Exception as e:
+        return f"Error reading log: {e}"
+
+def clear_flipper_log():
+    """Clear Flipper log file"""
+    try:
+        if os.path.exists(FLIPPER_LOG_FILE):
+            os.remove(FLIPPER_LOG_FILE)
+        if os.path.exists(FLIPPER_EXPORT_FILE):
+            os.remove(FLIPPER_EXPORT_FILE)
+        return "Logs cleared"
+    except Exception as e:
+        return f"Error clearing logs: {e}"
 
 class CECController:
     def __init__(self):
@@ -55,88 +104,107 @@ class CECController:
                 time.sleep(1)
     
     def process_command(self, command_json):
-        """Process CEC command and return response"""
+        """Process CEC command and return response with Flipper logging"""
         try:
             command = json.loads(command_json)
             cmd_type = command.get('command', '').upper()
             
+            # Log command to Flipper log
+            write_flipper_log(f"CMD: {cmd_type}")
+            
             if cmd_type == 'POWER_ON':
                 result = cec_control.power_on()
+                success = "✅" if "successful" in result else "❌"
+                write_flipper_log(f"POWER_ON: {success}")
+                save_flipper_export()  # Update export after successful command
                 return json.dumps({"status": "success", "result": result})
             elif cmd_type == 'POWER_OFF':
                 result = cec_control.power_off()
+                success = "✅" if "successful" in result else "❌"
+                write_flipper_log(f"POWER_OFF: {success}")
+                save_flipper_export()
                 return json.dumps({"status": "success", "result": result})
             elif cmd_type == 'SCAN':
                 result = cec_control.scan_devices()
+                write_flipper_log(f"SCAN: ✅")
                 return json.dumps({"status": "success", "result": result})
             elif cmd_type == 'STATUS':
                 result = cec_control.get_power_status()
+                write_flipper_log(f"STATUS: ✅")
                 return json.dumps({"status": "success", "result": result})
-            elif cmd_type == 'PING':
-                return json.dumps({"status": "success", "result": "pong"})
-            else:
-                return json.dumps({"status": "error", "result": "Unknown command"})
-                
-        except Exception as e:
-            return json.dumps({"status": "error", "result": str(e)})
-    
-    def start_http_server(self):
-        """Start HTTP server in background thread"""
-        from http_test import CECHandler, get_ip_address
-        
-        ip_address = get_ip_address()
-        self.http_server = HTTPServer(('0.0.0.0', 8080), CECHandler)
-        
-        http_thread = threading.Thread(target=self.http_server.serve_forever)
-        http_thread.daemon = True
-        http_thread.start()
-        
-        logger.info(f"HTTP server running on http://{ip_address}:8080")
-    
-    def start_gpio_interface(self):
-        """Future: GPIO interface for physical buttons"""
-        logger.info("GPIO interface ready (placeholder)")
-    
-    def run(self):
-        """Main application loop"""
-        self.running = True
-        
-        # Start all interfaces
-        self.start_http_server()
-        self.start_uart_interface()
-        self.start_gpio_interface()
-        
-        logger.info("CEC Controller running with all interfaces")
-        
-        # Keep running
-        while self.running:
-            time.sleep(1)
-    
-    def stop(self):
-        """Stop all interfaces"""
-        self.running = False
-        if self.http_server:
-            self.http_server.shutdown()
-        if self.uart_serial:
-            self.uart_serial.close()
-        logger.info("CEC Controller stopped")
-
-def signal_handler(sig, frame):
-    global controller
-    logger.info("Shutting down...")
-    if 'controller' in globals():
-        controller.stop()
-    sys.exit(0)
-
-if __name__ == "__main__":
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
-    
-    controller = CECController()
-    
-    try:
-        controller.run()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        controller.stop()
+            elif cmd_type == 'DEVICE_INFO':
+                result = cec_control.get_device_info()
+                write_flipper_log(f"DEVICE_INFO: ✅")
+                return json.dumps({"status": "success", "result": result})
+            elif cmd_type == 'VOLUME_UP':
+                result = cec_control.send_core_command("VOLUME_UP")
+                success = "✅" if "executed" in result else "❌"
+                write_flipper_log(f"VOL_UP: {success}")
+                save_flipper_export()
+                return json.dumps({"status": "success", "result": result})
+            elif cmd_type == 'VOLUME_DOWN':
+                result = cec_control.send_core_command("VOLUME_DOWN")
+                success = "✅" if "executed" in result else "❌"
+                write_flipper_log(f"VOL_DOWN: {success}")
+                save_flipper_export()
+                return json.dumps({"status": "success", "result": result})
+            elif cmd_type == 'MUTE':
+                result = cec_control.send_core_command("MUTE")
+                success = "✅" if "executed" in result else "❌"
+                write_flipper_log(f"MUTE: {success}")
+                save_flipper_export()
+                return json.dumps({"status": "success", "result": result})
+            elif cmd_type == 'HDMI_1':
+                result = cec_control.switch_input("HDMI1")
+                success = "✅" if "executed" in result else "❌"
+                write_flipper_log(f"HDMI_1: {success}")
+                save_flipper_export()
+                return json.dumps({"status": "success", "result": result})
+            elif cmd_type == 'HDMI_2':
+                result = cec_control.switch_input("HDMI2")
+                success = "✅" if "executed" in result else "❌"
+                write_flipper_log(f"HDMI_2: {success}")
+                save_flipper_export()
+                return json.dumps({"status": "success", "result": result})
+            elif cmd_type == 'HDMI_3':
+                result = cec_control.switch_input("HDMI3")
+                success = "✅" if "executed" in result else "❌"
+                write_flipper_log(f"HDMI_3: {success}")
+                save_flipper_export()
+                return json.dumps({"status": "success", "result": result})
+            elif cmd_type == 'HDMI_4':
+                result = cec_control.switch_input("HDMI4")
+                success = "✅" if "executed" in result else "❌"
+                write_flipper_log(f"HDMI_4: {success}")
+                save_flipper_export()
+                return json.dumps({"status": "success", "result": result})
+            elif cmd_type == 'CORE_COMMAND':
+                command_name = command.get('command_name', '')
+                result = cec_control.send_core_command(command_name)
+                success = "✅" if "executed" in result else "❌"
+                write_flipper_log(f"CORE_{command_name}: {success}")
+                save_flipper_export()
+                return json.dumps({"status": "success", "result": result})
+            elif cmd_type == 'CUSTOM':
+                cec_command = command.get('cec_command', '')
+                result = cec_control.send_custom_command(cec_command)
+                success = "✅" if "executed" in result else "❌"
+                write_flipper_log(f"CUSTOM_{cec_command}: {success}")
+                save_flipper_export()
+                return json.dumps({"status": "success", "result": result})
+            elif cmd_type == 'GET_FLIPPER_LOG':
+                result = get_flipper_log()
+                return json.dumps({"status": "success", "result": result})
+            elif cmd_type == 'GET_FLIPPER_EXPORT':
+                try:
+                    with open(FLIPPER_EXPORT_FILE, "r") as f:
+                        result = f.read()
+                    return json.dumps({"status": "success", "result": result})
+                except:
+                    return json.dumps({"status": "success", "result": "No export file found"})
+            elif cmd_type == 'CLEAR_FLIPPER_LOG':
+                result = clear_flipper_log()
+                return json.dumps({"status": "success", "result": result})
+            elif cmd_type == 'GET_COMMAND_LOG':
+                result = cec_control.get_command_log()
+                return json.dumps(
