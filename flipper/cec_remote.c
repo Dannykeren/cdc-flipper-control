@@ -34,6 +34,17 @@ typedef enum {
     CECRemoteMenuPowerOff,
     CECRemoteMenuScan,
     CECRemoteMenuStatus,
+    CECRemoteMenuDeviceInfo,
+    CECRemoteMenuHDMI1,
+    CECRemoteMenuHDMI2,
+    CECRemoteMenuHDMI3,
+    CECRemoteMenuHDMI4,
+    CECRemoteMenuVolumeUp,
+    CECRemoteMenuVolumeDown,
+    CECRemoteMenuMute,
+    CECRemoteMenuFlipperLog,
+    CECRemoteMenuFlipperExport,
+    CECRemoteMenuClearLog,
     CECRemoteMenuCustom,
 } CECRemoteMenuItem;
 
@@ -211,6 +222,61 @@ static void cec_remote_menu_callback(void* context, uint32_t index) {
             app->text_buffer[sizeof(app->text_buffer) - 1] = '\0';
             scene_manager_next_scene(app->scene_manager, CECRemoteSceneResult);
             break;
+        case CECRemoteMenuDeviceInfo:
+            strncpy(app->text_buffer, "{\"command\":\"DEVICE_INFO\"}", sizeof(app->text_buffer) - 1);
+            app->text_buffer[sizeof(app->text_buffer) - 1] = '\0';
+            scene_manager_next_scene(app->scene_manager, CECRemoteSceneResult);
+            break;
+        case CECRemoteMenuHDMI1:
+            strncpy(app->text_buffer, "{\"command\":\"HDMI_1\"}", sizeof(app->text_buffer) - 1);
+            app->text_buffer[sizeof(app->text_buffer) - 1] = '\0';
+            scene_manager_next_scene(app->scene_manager, CECRemoteSceneResult);
+            break;
+        case CECRemoteMenuHDMI2:
+            strncpy(app->text_buffer, "{\"command\":\"HDMI_2\"}", sizeof(app->text_buffer) - 1);
+            app->text_buffer[sizeof(app->text_buffer) - 1] = '\0';
+            scene_manager_next_scene(app->scene_manager, CECRemoteSceneResult);
+            break;
+        case CECRemoteMenuHDMI3:
+            strncpy(app->text_buffer, "{\"command\":\"HDMI_3\"}", sizeof(app->text_buffer) - 1);
+            app->text_buffer[sizeof(app->text_buffer) - 1] = '\0';
+            scene_manager_next_scene(app->scene_manager, CECRemoteSceneResult);
+            break;
+        case CECRemoteMenuHDMI4:
+            strncpy(app->text_buffer, "{\"command\":\"HDMI_4\"}", sizeof(app->text_buffer) - 1);
+            app->text_buffer[sizeof(app->text_buffer) - 1] = '\0';
+            scene_manager_next_scene(app->scene_manager, CECRemoteSceneResult);
+            break;
+        case CECRemoteMenuVolumeUp:
+            strncpy(app->text_buffer, "{\"command\":\"VOLUME_UP\"}", sizeof(app->text_buffer) - 1);
+            app->text_buffer[sizeof(app->text_buffer) - 1] = '\0';
+            scene_manager_next_scene(app->scene_manager, CECRemoteSceneResult);
+            break;
+        case CECRemoteMenuVolumeDown:
+            strncpy(app->text_buffer, "{\"command\":\"VOLUME_DOWN\"}", sizeof(app->text_buffer) - 1);
+            app->text_buffer[sizeof(app->text_buffer) - 1] = '\0';
+            scene_manager_next_scene(app->scene_manager, CECRemoteSceneResult);
+            break;
+        case CECRemoteMenuMute:
+            strncpy(app->text_buffer, "{\"command\":\"MUTE\"}", sizeof(app->text_buffer) - 1);
+            app->text_buffer[sizeof(app->text_buffer) - 1] = '\0';
+            scene_manager_next_scene(app->scene_manager, CECRemoteSceneResult);
+            break;
+        case CECRemoteMenuFlipperLog:
+            strncpy(app->text_buffer, "{\"command\":\"GET_FLIPPER_LOG\"}", sizeof(app->text_buffer) - 1);
+            app->text_buffer[sizeof(app->text_buffer) - 1] = '\0';
+            scene_manager_next_scene(app->scene_manager, CECRemoteSceneResult);
+            break;
+        case CECRemoteMenuFlipperExport:
+            strncpy(app->text_buffer, "{\"command\":\"GET_FLIPPER_EXPORT\"}", sizeof(app->text_buffer) - 1);
+            app->text_buffer[sizeof(app->text_buffer) - 1] = '\0';
+            scene_manager_next_scene(app->scene_manager, CECRemoteSceneResult);
+            break;
+        case CECRemoteMenuClearLog:
+            strncpy(app->text_buffer, "{\"command\":\"CLEAR_FLIPPER_LOG\"}", sizeof(app->text_buffer) - 1);
+            app->text_buffer[sizeof(app->text_buffer) - 1] = '\0';
+            scene_manager_next_scene(app->scene_manager, CECRemoteSceneResult);
+            break;
         case CECRemoteMenuCustom:
             scene_manager_next_scene(app->scene_manager, CECRemoteSceneCustomCommand);
             break;
@@ -297,6 +363,17 @@ void cec_remote_scene_menu_on_enter(void* context) {
     submenu_add_item(app->submenu, "Power OFF", CECRemoteMenuPowerOff, cec_remote_menu_callback, app);
     submenu_add_item(app->submenu, "Scan Devices", CECRemoteMenuScan, cec_remote_menu_callback, app);
     submenu_add_item(app->submenu, "Check Status", CECRemoteMenuStatus, cec_remote_menu_callback, app);
+    submenu_add_item(app->submenu, "Device Info", CECRemoteMenuDeviceInfo, cec_remote_menu_callback, app);
+    submenu_add_item(app->submenu, "HDMI 1", CECRemoteMenuHDMI1, cec_remote_menu_callback, app);
+    submenu_add_item(app->submenu, "HDMI 2", CECRemoteMenuHDMI2, cec_remote_menu_callback, app);
+    submenu_add_item(app->submenu, "HDMI 3", CECRemoteMenuHDMI3, cec_remote_menu_callback, app);
+    submenu_add_item(app->submenu, "HDMI 4", CECRemoteMenuHDMI4, cec_remote_menu_callback, app);
+    submenu_add_item(app->submenu, "Volume Up", CECRemoteMenuVolumeUp, cec_remote_menu_callback, app);
+    submenu_add_item(app->submenu, "Volume Down", CECRemoteMenuVolumeDown, cec_remote_menu_callback, app);
+    submenu_add_item(app->submenu, "Mute", CECRemoteMenuMute, cec_remote_menu_callback, app);
+    submenu_add_item(app->submenu, "View Log", CECRemoteMenuFlipperLog, cec_remote_menu_callback, app);
+    submenu_add_item(app->submenu, "Export Log", CECRemoteMenuFlipperExport, cec_remote_menu_callback, app);
+    submenu_add_item(app->submenu, "Clear Log", CECRemoteMenuClearLog, cec_remote_menu_callback, app);
     submenu_add_item(app->submenu, "Custom Command", CECRemoteMenuCustom, cec_remote_menu_callback, app);
     
     view_dispatcher_switch_to_view(app->view_dispatcher, CECRemoteViewSubmenu);
