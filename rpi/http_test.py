@@ -4,8 +4,19 @@ Simple HTTP server for testing CEC commands from Mac
 """
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import json
+import socket
 import urllib.parse
 import cec_control
+
+def get_ip_address():
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "localhost"
 
 class CECHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -42,6 +53,6 @@ class CECHandler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     server = HTTPServer(('0.0.0.0', 8080), CECHandler)
-    print("HTTP CEC Test Server running on http://192.168.10.51:8080")
-    print("Test with: curl 'http://192.168.10.51:8080?cmd=PING'")
+print(f"HTTP CEC Test Server running on http://{get_ip_address()}:8080")
+print(f"Test with: curl 'http://{ip_address}:8080?cmd=PING'")
     server.serve_forever()
