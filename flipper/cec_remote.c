@@ -8,7 +8,7 @@
 #include <gui/modules/text_input.h>
 #include <gui/modules/popup.h>
 #include <notification/notification_messages.h>
-#include <furi_hal_serial.h>
+#include <furi_hal.h>
 #include <expansion/expansion.h>
 #include <string.h>
 #include <stdio.h>
@@ -54,7 +54,6 @@ typedef struct {
     
     FuriHalSerialHandle* serial_handle;
     FuriStreamBuffer* rx_stream;
-    FuriThread* worker_thread;
 } CECRemoteApp;
 
 // Forward declarations
@@ -71,60 +70,20 @@ void cec_remote_scene_result_on_enter(void* context);
 bool cec_remote_scene_result_on_event(void* context, SceneManagerEvent event);
 void cec_remote_scene_result_on_exit(void* context);
 
-// UART communication using hardware USART (proper method)
-static void uart_rx_callback(FuriHalSerialHandle* handle, FuriHalSerialRxEvent event, void* context) {
-    CECRemoteApp* app = context;
-    
-    if(event == FuriHalSerialRxEventData) {
-        uint8_t data = furi_hal_serial_async_rx(handle);
-        furi_stream_buffer_send(app->rx_stream, &data, 1, 0);
-        furi_thread_flags_set(furi_thread_get_id(app->worker_thread), 1);
-    }
-}
-
-static int32_t uart_worker(void* context) {
-    CECRemoteApp* app = context;
-    
-    while(true) {
-        uint32_t events = furi_thread_flags_wait(1, FuriFlagWaitAny, FuriWaitForever);
-        if(events & 1) {
-            // Process incoming data
-            uint8_t data[256];
-            size_t bytes_read = furi_stream_buffer_receive(app->rx_stream, data, sizeof(data) - 1, 0);
-            
-            if(bytes_read > 0) {
-                data[bytes_read] = '\0';
-                FURI_LOG_I(TAG, "Received: %s", (char*)data);
-            }
-        }
-    }
-    
-    return 0;
-}
-
+// Simplified UART using hardware USART (based on working examples)
 static bool cec_remote_uart_init(CECRemoteApp* app) {
-    // Use hardware USART - this is the correct way!
+    // Acquire USART handle
     app->serial_handle = furi_hal_serial_control_acquire(FuriHalSerialIdUsart);
     if(!app->serial_handle) {
-        FURI_LOG_E(TAG, "Failed to acquire serial handle");
+        FURI_LOG_E(TAG, "Failed to acquire USART");
         return false;
     }
     
+    // Initialize with 115200 baud
     furi_hal_serial_init(app->serial_handle, 115200);
     
-    // Create stream buffer for incoming data
+    // Create stream buffer for received data
     app->rx_stream = furi_stream_buffer_alloc(1024, 1);
-    
-    // Create worker thread
-    app->worker_thread = furi_thread_alloc();
-    furi_thread_set_name(app->worker_thread, "UARTWorker");
-    furi_thread_set_stack_size(app->worker_thread, 1024);
-    furi_thread_set_callback(app->worker_thread, uart_worker);
-    furi_thread_set_context(app->worker_thread, app);
-    furi_thread_start(app->worker_thread);
-    
-    // Set RX callback
-    furi_hal_serial_async_rx_start(app->serial_handle, uart_rx_callback, app, false);
     
     app->uart_initialized = true;
     FURI_LOG_I(TAG, "UART initialized successfully");
@@ -133,61 +92,62 @@ static bool cec_remote_uart_init(CECRemoteApp* app) {
 
 static void cec_remote_uart_deinit(CECRemoteApp* app) {
     if(app->uart_initialized) {
-        furi_hal_serial_async_rx_stop(app->serial_handle);
-        
-        if(app->worker_thread) {
-            furi_thread_flags_set(furi_thread_get_id(app->worker_thread), 2);
-            furi_thread_join(app->worker_thread);
-            furi_thread_free(app->worker_thread);
-        }
-        
         if(app->rx_stream) {
             furi_stream_buffer_free(app->rx_stream);
+            app->rx_stream = NULL;
         }
         
         furi_hal_serial_deinit(app->serial_handle);
         furi_hal_serial_control_release(app->serial_handle);
+        app->serial_handle = NULL;
         
         app->uart_initialized = false;
+        FURI_LOG_I(TAG, "UART deinitialized");
     }
 }
 
 static bool cec_remote_uart_send(CECRemoteApp* app, const char* data) {
-    if(!app->uart_initialized) {
+    if(!app->uart_initialized || !app->serial_handle) {
         return false;
     }
     
     FURI_LOG_I(TAG, "Sending: %s", data);
     
-    // Send data + newline
+    // Send the data
     furi_hal_serial_tx(app->serial_handle, (uint8_t*)data, strlen(data));
+    // Send newline
     furi_hal_serial_tx(app->serial_handle, (uint8_t*)"\n", 1);
+    // Wait for transmission to complete
     furi_hal_serial_tx_wait_complete(app->serial_handle);
     
     return true;
 }
 
 static bool cec_remote_uart_receive(CECRemoteApp* app, char* buffer, size_t buffer_size, uint32_t timeout_ms) {
-    if(!app->uart_initialized) {
+    if(!app->uart_initialized || !app->serial_handle) {
         return false;
     }
     
     uint32_t start_time = furi_get_tick();
     size_t total_received = 0;
     
+    // Simple polling approach for receiving
     while(furi_get_tick() - start_time < timeout_ms && total_received < buffer_size - 1) {
-        uint8_t data[32];
-        size_t bytes_read = furi_stream_buffer_receive(app->rx_stream, data, sizeof(data), 100);
-        
-        if(bytes_read > 0) {
-            for(size_t i = 0; i < bytes_read && total_received < buffer_size - 1; i++) {
-                if(data[i] == '\n') {
-                    buffer[total_received] = '\0';
-                    FURI_LOG_I(TAG, "Complete message received: %s", buffer);
+        if(furi_hal_serial_rx_available(app->serial_handle)) {
+            uint8_t byte = furi_hal_serial_rx(app->serial_handle);
+            
+            if(byte == '\n' || byte == '\r') {
+                // End of line - we have a complete message
+                buffer[total_received] = '\0';
+                if(total_received > 0) {
+                    FURI_LOG_I(TAG, "Received: %s", buffer);
                     return true;
                 }
-                buffer[total_received++] = data[i];
+            } else if(byte >= 32 && byte <= 126) { // Printable characters
+                buffer[total_received++] = byte;
             }
+        } else {
+            furi_delay_ms(10); // Small delay to avoid busy waiting
         }
     }
     
@@ -478,7 +438,6 @@ static CECRemoteApp* cec_remote_app_alloc(void) {
     app->uart_initialized = false;
     app->serial_handle = NULL;
     app->rx_stream = NULL;
-    app->worker_thread = NULL;
     
     return app;
 }
