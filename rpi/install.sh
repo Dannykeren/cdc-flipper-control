@@ -26,10 +26,10 @@ PI_MODEL=$(cat /proc/device-tree/model)
 echo "Detected: $PI_MODEL"
 
 if [[ "$PI_MODEL" == *"Pi Zero 2"* ]]; then
-    # Pi Zero 2 W uses dwc2
-    USB_OVERLAY="dwc2"
-    USB_MODULE="libcomposite"
-    echo "Using dwc2 overlay for Pi Zero 2 W"
+    # Pi Zero 2 W uses dwc_otg
+    USB_OVERLAY="dwc_otg"
+    USB_MODULE="dwc_otg"
+    echo "Using dwc_otg overlay for Pi Zero 2 W"
 else
     # Other Pi models use dwc2
     USB_OVERLAY="dwc2"
@@ -41,7 +41,11 @@ fi
 if ! grep -q "^dtoverlay=$USB_OVERLAY" /boot/config.txt; then
     # Remove any existing USB overlays first
     sed -i '/^dtoverlay=dwc/d' /boot/config.txt
-    echo "dtoverlay=$USB_OVERLAY" >> /boot/config.txt
+    if [[ "$USB_OVERLAY" == "dwc_otg" ]]; then
+       echo "dtoverlay=$USB_OVERLAY,dr_mode=otg" >> /boot/config.txt
+    else
+       echo "dtoverlay=$USB_OVERLAY" >> /boot/config.txt
+    fi
     echo "✅ Added $USB_OVERLAY overlay to boot config"
 fi
 
