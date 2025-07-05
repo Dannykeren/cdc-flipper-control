@@ -1,3 +1,4 @@
+cat > install.sh << 'EOF'
 #!/bin/bash
 
 echo "========================================="
@@ -35,7 +36,7 @@ python3 -m venv $INSTALL_DIR/venv
 source $INSTALL_DIR/venv/bin/activate
 pip install pyserial
 
-cat > /usr/local/bin/setup-usb-gadget.sh << 'EOF'
+cat > /usr/local/bin/setup-usb-gadget.sh << 'EOFINNER'
 #!/bin/bash
 cd /sys/kernel/config/usb_gadget/
 mkdir -p cec_flipper 2>/dev/null || true
@@ -64,24 +65,30 @@ sleep 2
 if [ -e /dev/ttyGS0 ]; then
     chmod 666 /dev/ttyGS0
 fi
-EOF
+EOFINNER
 
 chmod +x /usr/local/bin/setup-usb-gadget.sh
 
-# Get repo info for downloading files
-REPO_URL=$(curl -s "https://api.github.com/repos/$(whoami)/cec-flipper-control" 2>/dev/null | grep -o '"clone_url": "[^"]*' | cut -d'"' -f4 | sed 's/\.git$//' | sed 's/https:\/\/github.com\///')
+echo "📥 Downloading application files..."
 
-if [ -n "$REPO_URL" ]; then
-    curl -sSL "https://raw.githubusercontent.com/$REPO_URL/main/rpi/cec_control.py" > $INSTALL_DIR/cec_control.py
-    curl -sSL "https://raw.githubusercontent.com/$REPO_URL/main/rpi/main.py" > $INSTALL_DIR/main.py
+# Download files with proper error handling
+if curl -sSL "https://raw.githubusercontent.com/dannykeren/cec-flipper-control/main/rpi/cec_control.py" > $INSTALL_DIR/cec_control.py; then
+    echo "✅ Downloaded cec_control.py"
 else
-    echo "Could not determine repository URL. Please download files manually."
+    echo "❌ Failed to download cec_control.py"
+    exit 1
+fi
+
+if curl -sSL "https://raw.githubusercontent.com/dannykeren/cec-flipper-control/main/rpi/main.py" > $INSTALL_DIR/main.py; then
+    echo "✅ Downloaded main.py"
+else
+    echo "❌ Failed to download main.py"
     exit 1
 fi
 
 chmod +x $INSTALL_DIR/main.py
 
-cat > /etc/systemd/system/usb-gadget.service << 'EOF'
+cat > /etc/systemd/system/usb-gadget.service << 'EOFINNER'
 [Unit]
 Description=Setup USB Gadget for CEC Control
 After=local-fs.target
@@ -93,9 +100,9 @@ RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target
-EOF
+EOFINNER
 
-cat > /etc/systemd/system/cec-flipper.service << EOF
+cat > /etc/systemd/system/cec-flipper.service << EOFINNER
 [Unit]
 Description=CEC Flipper Control
 After=usb-gadget.service
@@ -112,7 +119,7 @@ Group=root
 
 [Install]
 WantedBy=multi-user.target
-EOF
+EOFINNER
 
 systemctl enable usb-gadget.service
 systemctl enable cec-flipper.service
@@ -126,3 +133,4 @@ echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
   reboot
 fi
+EOF
