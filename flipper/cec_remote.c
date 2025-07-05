@@ -7,6 +7,7 @@
 #include <gui/modules/popup.h>
 #include <notification/notification_messages.h>
 #include <furi_hal_gpio.h>
+#include <furi_hal_uart.h>
 
 #define TAG "CECRemote"
 
@@ -45,6 +46,10 @@ typedef struct {
     char custom_command[64];
     char result_buffer[1024];
     bool is_connected;
+    
+    // UART communication
+    FuriStreamBuffer* uart_stream;
+    bool uart_initialized;
 } CECRemoteApp;
 
 // Forward declarations
@@ -61,14 +66,90 @@ void cec_remote_scene_result_on_enter(void* context);
 bool cec_remote_scene_result_on_event(void* context, SceneManagerEvent event);
 void cec_remote_scene_result_on_exit(void* context);
 
+// UART Communication Functions
+static void uart_on_irq_cb(UartIrqEvent ev, uint8_t data, void* context) {
+    CECRemoteApp* app = (CECRemoteApp*)context;
+    
+    if(ev == UartIrqEventRXNE) {
+        furi_stream_buffer_send(app->uart_stream, &data, 1, 0);
+    }
+}
+
+static bool cec_remote_uart_init(CECRemoteApp* app) {
+    app->uart_stream = furi_stream_buffer_alloc(1024, 1);
+    
+    furi_hal_uart_init(FuriHalUartIdUSART1, 115200);
+    furi_hal_uart_set_irq_cb(FuriHalUartIdUSART1, uart_on_irq_cb, app);
+    
+    app->uart_initialized = true;
+    return true;
+}
+
+static void cec_remote_uart_deinit(CECRemoteApp* app) {
+    if(app->uart_initialized) {
+        furi_hal_uart_deinit(FuriHalUartIdUSART1);
+        furi_stream_buffer_free(app->uart_stream);
+        app->uart_initialized = false;
+    }
+}
+
+static bool cec_remote_uart_send(CECRemoteApp* app, const char* data) {
+    if(!app->uart_initialized) {
+        return false;
+    }
+    
+    FURI_LOG_I(TAG, "Sending UART: %s", data);
+    furi_hal_uart_tx(FuriHalUartIdUSART1, (uint8_t*)data, strlen(data));
+    furi_hal_uart_tx(FuriHalUartIdUSART1, (uint8_t*)"\n", 1);
+    
+    return true;
+}
+
+static bool cec_remote_uart_receive(CECRemoteApp* app, char* buffer, size_t buffer_size, uint32_t timeout_ms) {
+    if(!app->uart_initialized) {
+        return false;
+    }
+    
+    size_t bytes_received = 0;
+    uint32_t start_time = furi_get_tick();
+    
+    while(bytes_received < buffer_size - 1) {
+        if(furi_get_tick() - start_time > timeout_ms) {
+            break;
+        }
+        
+        uint8_t byte;
+        if(furi_stream_buffer_receive(app->uart_stream, &byte, 1, 10) == 1) {
+            if(byte == '\n') {
+                buffer[bytes_received] = '\0';
+                FURI_LOG_I(TAG, "Received UART: %s", buffer);
+                return true;
+            } else if(byte >= 32 && byte <= 126) { // Printable characters
+                buffer[bytes_received++] = byte;
+            }
+        }
+    }
+    
+    buffer[bytes_received] = '\0';
+    return bytes_received > 0;
+}
+
 // Communication function - returns actual errors
 static bool cec_remote_send_command(CECRemoteApp* app, const char* command) {
     FURI_LOG_I(TAG, "Sending command: %s", command);
     
-    // TODO: Implement actual UART communication here
-    // For now, return error since UART is not implemented
-    strcpy(app->result_buffer, "ERROR: UART not implemented yet");
-    return false;
+    if(!cec_remote_uart_send(app, command)) {
+        strcpy(app->result_buffer, "ERROR: UART send failed");
+        return false;
+    }
+    
+    // Wait for response
+    if(!cec_remote_uart_receive(app, app->result_buffer, sizeof(app->result_buffer), 5000)) {
+        strcpy(app->result_buffer, "ERROR: No response from Pi");
+        return false;
+    }
+    
+    return true;
 }
 
 // Menu callback
@@ -128,12 +209,26 @@ void cec_remote_scene_start_on_enter(void* context) {
     popup_set_text(app->popup, "Connecting to Pi...", 64, 32, AlignCenter, AlignCenter);
     view_dispatcher_switch_to_view(app->view_dispatcher, CECRemoteViewPopup);
     
-    furi_delay_ms(1000);
+    // Initialize UART
+    if(cec_remote_uart_init(app)) {
+        furi_delay_ms(1000);
+        
+        // Test connection with PING
+        if(cec_remote_uart_send(app, "{\"command\":\"PING\"}")) {
+            char response[256];
+            if(cec_remote_uart_receive(app, response, sizeof(response), 3000)) {
+                app->is_connected = true;
+                notification_message(app->notifications, &sequence_success);
+                scene_manager_next_scene(app->scene_manager, CECRemoteSceneMenu);
+                return;
+            }
+        }
+    }
     
-    // For now, connection always fails since UART is not implemented
+    // Connection failed
     app->is_connected = false;
     popup_set_header(app->popup, "Connection Failed", 64, 10, AlignCenter, AlignTop);
-    popup_set_text(app->popup, "UART not implemented\nPress Back to exit", 64, 32, AlignCenter, AlignCenter);
+    popup_set_text(app->popup, "Check Pi connection\nPress Back to exit", 64, 32, AlignCenter, AlignCenter);
     notification_message(app->notifications, &sequence_error);
 }
 
@@ -316,12 +411,18 @@ static CECRemoteApp* cec_remote_app_alloc(void) {
     view_dispatcher_add_view(app->view_dispatcher, CECRemoteViewPopup, popup_get_view(app->popup));
     
     app->is_connected = false;
+    app->uart_stream = NULL;
+    app->uart_initialized = false;
     
     return app;
 }
 
 static void cec_remote_app_free(CECRemoteApp* app) {
     furi_assert(app);
+    
+    if(app->uart_initialized) {
+        cec_remote_uart_deinit(app);
+    }
     
     view_dispatcher_remove_view(app->view_dispatcher, CECRemoteViewSubmenu);
     submenu_free(app->submenu);
