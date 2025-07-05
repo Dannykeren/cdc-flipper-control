@@ -12,41 +12,7 @@
 #include <string.h>
 #include <stdio.h>
 
-typedef struct {
-    Gui*                gui;
-    ViewDispatcher*     view_dispatcher;
-    SceneManager*       scene_manager;
-    Submenu*            submenu;
-    TextInput*          text_input;
-    Popup*              popup;
-    NotificationApp*    notifications;
-    char                text_buffer[256];
-    char                custom_command[64];
-    char                result_buffer[512];
-    bool                is_connected;
-    bool                uart_initialized;
-    uint8_t             selected_vendor;
-    FuriHalSerialHandle* serial_handle;
-    FuriStreamBuffer*   rx_stream;
-    FuriTimer*          cleanup_timer;
-} CECRemoteApp;
-
-static CECRemoteApp* cec_remote_app_alloc(void);
-static void          cec_remote_app_free(CECRemoteApp* app);
-
-#define TAG "CECRemote"
-
-int32_t cec_remote_app(void* p) {
-    UNUSED(p);
-    CECRemoteApp* app = cec_remote_app_alloc();
-
-    scene_manager_next_scene(app->scene_manager, CECRemoteSceneStart);
-    view_dispatcher_run(app->view_dispatcher);
-
-    cec_remote_app_free(app);
-    return 0;
-}
-
+// Moved these enums to the top as they are used early
 typedef enum {
     CECRemoteViewSubmenu,
     CECRemoteViewTextInput,
@@ -93,6 +59,8 @@ typedef enum {
     CECCommandBack,
 } CECCommandMenuItem;
 
+
+// Only one definition for CECRemoteApp
 typedef struct {
     Gui* gui;
     ViewDispatcher* view_dispatcher;
@@ -101,20 +69,34 @@ typedef struct {
     TextInput* text_input;
     Popup* popup;
     NotificationApp* notifications;
-    
-    char text_buffer[256];
-    char custom_command[64];
-    char result_buffer[512];  // Reduced buffer size for safety
-    bool is_connected;
-    bool uart_initialized;
-    
-    // Current vendor selection
-    uint8_t selected_vendor;
-    
+    char                text_buffer[256];
+    char                custom_command[64];
+    char                result_buffer[512];
+    bool                is_connected;
+    bool                uart_initialized;
+    uint8_t             selected_vendor;
     FuriHalSerialHandle* serial_handle;
     FuriStreamBuffer* rx_stream;
     FuriTimer* cleanup_timer;
 } CECRemoteApp;
+
+// Forward declarations - ensure they match the definitions exactly
+static CECRemoteApp* cec_remote_app_alloc(void);
+static void          cec_remote_app_free(CECRemoteApp* app);
+
+#define TAG "CECRemote"
+
+int32_t cec_remote_app(void* p) {
+    UNUSED(p);
+    CECRemoteApp* app = cec_remote_app_alloc();
+
+    scene_manager_next_scene(app->scene_manager, CECRemoteSceneStart);
+    view_dispatcher_run(app->view_dispatcher);
+
+    cec_remote_app_free(app);
+    return 0;
+}
+
 
 // Command definitions by vendor
 typedef struct {
@@ -235,7 +217,7 @@ static const char* get_vendor_name(uint8_t vendor) {
     }
 }
 
-// Forward declarations
+// Forward declarations for scene functions
 void cec_remote_scene_start_on_enter(void* context);
 bool cec_remote_scene_start_on_event(void* context, SceneManagerEvent event);
 void cec_remote_scene_start_on_exit(void* context);
