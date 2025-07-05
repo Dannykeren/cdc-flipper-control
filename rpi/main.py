@@ -207,4 +207,85 @@ class CECController:
                 return json.dumps({"status": "success", "result": result})
             elif cmd_type == 'GET_COMMAND_LOG':
                 result = cec_control.get_command_log()
-                return json.dumps(
+                return json.dumps({"status": "success", "result": result})
+            elif cmd_type == 'GET_BRIGHTSIGN_EXPORT':
+                result = cec_control.get_brightsign_export()
+                return json.dumps({"status": "success", "result": result})
+            elif cmd_type == 'SAVE_COMMAND_LOG':
+                filename = cec_control.save_command_log()
+                return json.dumps({"status": "success", "result": f"Log saved to {filename}"})
+            elif cmd_type == 'CEC_RESET':
+                # Special command for Epson projectors
+                result = cec_control.epson_cec_reset()
+                write_flipper_log(f"CEC_RESET: ✅")
+                return json.dumps({"status": "success", "result": "CEC reset performed"})
+            elif cmd_type == 'PING':
+                return json.dumps({"status": "success", "result": "pong"})
+            else:
+                write_flipper_log(f"UNKNOWN_CMD: {cmd_type}")
+                return json.dumps({"status": "error", "result": "Unknown command"})
+                
+        except Exception as e:
+            write_flipper_log(f"ERROR: {str(e)}")
+            return json.dumps({"status": "error", "result": str(e)})
+    
+    def start_http_server(self):
+        """Start HTTP server in background thread"""
+        from http_test import CECHandler, get_ip_address
+        
+        ip_address = get_ip_address()
+        self.http_server = HTTPServer(('0.0.0.0', 8080), CECHandler)
+        
+        http_thread = threading.Thread(target=self.http_server.serve_forever)
+        http_thread.daemon = True
+        http_thread.start()
+        
+        logger.info(f"HTTP server running on http://{ip_address}:8080")
+    
+    def start_gpio_interface(self):
+        """Future: GPIO interface for physical buttons"""
+        logger.info("GPIO interface ready (placeholder)")
+    
+    def run(self):
+        """Main application loop"""
+        self.running = True
+        
+        # Start all interfaces
+        self.start_http_server()
+        self.start_uart_interface()
+        self.start_gpio_interface()
+        
+        logger.info("CEC Controller running with all interfaces")
+        
+        # Keep running
+        while self.running:
+            time.sleep(1)
+    
+    def stop(self):
+        """Stop all interfaces"""
+        self.running = False
+        if self.http_server:
+            self.http_server.shutdown()
+        if self.uart_serial:
+            self.uart_serial.close()
+        logger.info("CEC Controller stopped")
+
+def signal_handler(sig, frame):
+    global controller
+    logger.info("Shutting down...")
+    if 'controller' in globals():
+        controller.stop()
+    sys.exit(0)
+
+if __name__ == "__main__":
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
+    controller = CECController()
+    
+    try:
+        controller.run()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        controller.stop()
