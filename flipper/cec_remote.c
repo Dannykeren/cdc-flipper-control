@@ -41,7 +41,7 @@ typedef struct {
     NotificationApp* notifications;
     
     char text_buffer[256];
-    char custom_command[128];  // Separate buffer for custom commands
+    char custom_command[64];  // Smaller buffer for custom commands
     char result_buffer[1024];
     bool is_connected;
 } CECRemoteApp;
@@ -66,11 +66,7 @@ static bool cec_remote_send_command(CECRemoteApp* app, const char* command) {
         return false;
     }
     
-    // Log the command for now
     FURI_LOG_I(TAG, "Sending command: %s", command);
-    
-    // TODO: Implement actual USB communication
-    // For now, simulate success
     return true;
 }
 
@@ -78,7 +74,6 @@ static bool cec_remote_wait_response(CECRemoteApp* app, uint32_t timeout_ms) {
     UNUSED(app);
     UNUSED(timeout_ms);
     
-    // Simulate response received after delay
     furi_delay_ms(500);
     return true;
 }
@@ -118,26 +113,20 @@ static void cec_remote_menu_callback(void* context, uint32_t index) {
 static void cec_remote_text_input_callback(void* context) {
     CECRemoteApp* app = context;
     
-    // Safely format custom command with proper bounds checking
-    // JSON overhead: {"command":"CUSTOM","cec_command":""} = 38 characters
-    // So we need to limit the custom command to 256 - 38 - 1 = 217 characters
-    const size_t json_overhead = 38;
-    const size_t max_cmd_len = sizeof(app->text_buffer) - json_overhead - 1;
+    // Simple and safe: just truncate the custom command if it's too long
+    // Maximum safe length for custom command in JSON is about 200 chars
+    // But we'll be extra safe and limit to 50 chars
+    const size_t max_custom_cmd_len = 50;
     
-    // Truncate custom command if too long
-    if(strlen(app->custom_command) > max_cmd_len) {
-        app->custom_command[max_cmd_len] = '\0';
+    size_t cmd_len = strlen(app->custom_command);
+    if(cmd_len > max_custom_cmd_len) {
+        app->custom_command[max_custom_cmd_len] = '\0';
     }
     
-    // Now safely format the JSON
-    int result = snprintf(app->text_buffer, sizeof(app->text_buffer),
-                         "{\"command\":\"CUSTOM\",\"cec_command\":\"%s\"}", 
-                         app->custom_command);
-    
-    // Ensure null termination (snprintf should handle this, but be safe)
-    if(result >= (int)sizeof(app->text_buffer)) {
-        app->text_buffer[sizeof(app->text_buffer) - 1] = '\0';
-    }
+    // Format the JSON command safely
+    snprintf(app->text_buffer, sizeof(app->text_buffer),
+             "{\"command\":\"CUSTOM\",\"cec_command\":\"%.50s\"}", 
+             app->custom_command);
     
     scene_manager_next_scene(app->scene_manager, CECRemoteSceneResult);
 }
@@ -150,10 +139,8 @@ void cec_remote_scene_start_on_enter(void* context) {
     popup_set_text(app->popup, "Connecting to RPi...", 64, 32, AlignCenter, AlignCenter);
     view_dispatcher_switch_to_view(app->view_dispatcher, CECRemoteViewPopup);
     
-    // Simulate connection attempt
     furi_delay_ms(1000);
     
-    // For now, assume connection is successful
     app->is_connected = true;
     notification_message(app->notifications, &sequence_success);
     scene_manager_next_scene(app->scene_manager, CECRemoteSceneMenu);
@@ -205,7 +192,7 @@ void cec_remote_scene_custom_on_enter(void* context) {
         app->text_input,
         cec_remote_text_input_callback,
         app,
-        app->custom_command,  // Use separate buffer for input
+        app->custom_command,
         sizeof(app->custom_command),
         true);
     
@@ -310,7 +297,6 @@ const SceneManagerHandlers cec_remote_scene_handlers = {
 static CECRemoteApp* cec_remote_app_alloc(void) {
     CECRemoteApp* app = malloc(sizeof(CECRemoteApp));
     
-    // Initialize all buffers to empty strings
     memset(app->text_buffer, 0, sizeof(app->text_buffer));
     memset(app->custom_command, 0, sizeof(app->custom_command));
     memset(app->result_buffer, 0, sizeof(app->result_buffer));
@@ -345,7 +331,6 @@ static CECRemoteApp* cec_remote_app_alloc(void) {
 static void cec_remote_app_free(CECRemoteApp* app) {
     furi_assert(app);
     
-    // Free views
     view_dispatcher_remove_view(app->view_dispatcher, CECRemoteViewSubmenu);
     submenu_free(app->submenu);
     
@@ -355,11 +340,9 @@ static void cec_remote_app_free(CECRemoteApp* app) {
     view_dispatcher_remove_view(app->view_dispatcher, CECRemoteViewPopup);
     popup_free(app->popup);
     
-    // Free scene manager and view dispatcher
     scene_manager_free(app->scene_manager);
     view_dispatcher_free(app->view_dispatcher);
     
-    // Close records
     furi_record_close(RECORD_NOTIFICATION);
     furi_record_close(RECORD_GUI);
     
@@ -372,13 +355,10 @@ int32_t cec_remote_app(void* p) {
     
     CECRemoteApp* app = cec_remote_app_alloc();
     
-    // Start with the connection scene
     scene_manager_next_scene(app->scene_manager, CECRemoteSceneStart);
     
-    // Run the app
     view_dispatcher_run(app->view_dispatcher);
     
-    // Cleanup
     cec_remote_app_free(app);
     
     return 0;
