@@ -70,8 +70,9 @@ void cec_remote_scene_result_on_exit(void* context);
 // Simple UART Communication using GPIO bit-banging
 static bool cec_remote_uart_init(CECRemoteApp* app) {
     // Initialize GPIO pins for UART (Pin 13 = TX, Pin 14 = RX)
-    furi_hal_gpio_init(&gpio_ext_pa7, GpioModeOutputPushPull, GpioPullUp, GpioSpeedVeryHigh);  // Pin 13 TX
-    furi_hal_gpio_init(&gpio_ext_pa6, GpioModeInput, GpioPullUp, GpioSpeedVeryHigh);          // Pin 14 RX
+    // Using standard GPIO pin definitions
+    furi_hal_gpio_init_simple(&gpio_ext_pa7, GpioModeOutputPushPull);  // Pin 13 TX
+    furi_hal_gpio_init_simple(&gpio_ext_pa6, GpioModeInput);          // Pin 14 RX
     
     // Set TX line high (idle state)
     furi_hal_gpio_write(&gpio_ext_pa7, true);
@@ -82,8 +83,8 @@ static bool cec_remote_uart_init(CECRemoteApp* app) {
 
 static void cec_remote_uart_deinit(CECRemoteApp* app) {
     if(app->uart_initialized) {
-        furi_hal_gpio_init(&gpio_ext_pa7, GpioModeAnalog, GpioPullNo, GpioSpeedLow);  // Pin 13
-        furi_hal_gpio_init(&gpio_ext_pa6, GpioModeAnalog, GpioPullNo, GpioSpeedLow);  // Pin 14
+        furi_hal_gpio_init_simple(&gpio_ext_pa7, GpioModeAnalog);  // Pin 13
+        furi_hal_gpio_init_simple(&gpio_ext_pa6, GpioModeAnalog);  // Pin 14
         app->uart_initialized = false;
     }
 }
