@@ -69,12 +69,12 @@ void cec_remote_scene_result_on_exit(void* context);
 
 // Simple UART Communication using GPIO bit-banging
 static bool cec_remote_uart_init(CECRemoteApp* app) {
-    // Initialize GPIO pins for UART
-    furi_hal_gpio_init(&gpio_usart_tx, GpioModeOutputPushPull, GpioPullUp, GpioSpeedVeryHigh);
-    furi_hal_gpio_init(&gpio_usart_rx, GpioModeInput, GpioPullUp, GpioSpeedVeryHigh);
+    // Initialize GPIO pins for UART (Pin 13 = TX, Pin 14 = RX)
+    furi_hal_gpio_init(&gpio_ext_pa7, GpioModeOutputPushPull, GpioPullUp, GpioSpeedVeryHigh);  // Pin 13 TX
+    furi_hal_gpio_init(&gpio_ext_pa6, GpioModeInput, GpioPullUp, GpioSpeedVeryHigh);          // Pin 14 RX
     
     // Set TX line high (idle state)
-    furi_hal_gpio_write(&gpio_usart_tx, true);
+    furi_hal_gpio_write(&gpio_ext_pa7, true);
     
     app->uart_initialized = true;
     return true;
@@ -82,8 +82,8 @@ static bool cec_remote_uart_init(CECRemoteApp* app) {
 
 static void cec_remote_uart_deinit(CECRemoteApp* app) {
     if(app->uart_initialized) {
-        furi_hal_gpio_init(&gpio_usart_tx, GpioModeAnalog, GpioPullNo, GpioSpeedLow);
-        furi_hal_gpio_init(&gpio_usart_rx, GpioModeAnalog, GpioPullNo, GpioSpeedLow);
+        furi_hal_gpio_init(&gpio_ext_pa7, GpioModeAnalog, GpioPullNo, GpioSpeedLow);  // Pin 13
+        furi_hal_gpio_init(&gpio_ext_pa6, GpioModeAnalog, GpioPullNo, GpioSpeedLow);  // Pin 14
         app->uart_initialized = false;
     }
 }
@@ -92,17 +92,17 @@ static void uart_send_byte(uint8_t byte) {
     uint32_t bit_time = 1000000 / 115200; // microseconds per bit
     
     // Start bit
-    furi_hal_gpio_write(&gpio_usart_tx, false);
+    furi_hal_gpio_write(&gpio_ext_pa7, false);  // Pin 13 TX
     furi_delay_us(bit_time);
     
     // Data bits (LSB first)
     for(int i = 0; i < 8; i++) {
-        furi_hal_gpio_write(&gpio_usart_tx, (byte >> i) & 1);
+        furi_hal_gpio_write(&gpio_ext_pa7, (byte >> i) & 1);
         furi_delay_us(bit_time);
     }
     
     // Stop bit
-    furi_hal_gpio_write(&gpio_usart_tx, true);
+    furi_hal_gpio_write(&gpio_ext_pa7, true);
     furi_delay_us(bit_time);
 }
 
@@ -111,7 +111,7 @@ static uint8_t uart_receive_byte(uint32_t timeout_ms) {
     uint32_t start_time = furi_get_tick();
     
     // Wait for start bit (line goes low)
-    while(furi_hal_gpio_read(&gpio_usart_rx) == true) {
+    while(furi_hal_gpio_read(&gpio_ext_pa6) == true) {  // Pin 14 RX
         if(furi_get_tick() - start_time > timeout_ms) {
             return 0; // Timeout
         }
@@ -125,7 +125,7 @@ static uint8_t uart_receive_byte(uint32_t timeout_ms) {
     uint8_t byte = 0;
     for(int i = 0; i < 8; i++) {
         furi_delay_us(bit_time);
-        if(furi_hal_gpio_read(&gpio_usart_rx)) {
+        if(furi_hal_gpio_read(&gpio_ext_pa6)) {
             byte |= (1 << i);
         }
     }
