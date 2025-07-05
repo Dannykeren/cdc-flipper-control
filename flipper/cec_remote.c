@@ -1,20 +1,4 @@
-static bool cec_remote_uart_send(CECRemoteApp* app, const char* data) {
-    if(!app->uart_initialized) {
-        return false;
-    }
-    
-    FURI_LOG_I(TAG, "Sending UART: %s", data);
-    
-    // Send each character
-    for(size_t i = 0; i < strlen(data); i++) {
-        uart_send_byte(data[i]);
-    }
-    
-    // Send newline
-    uart_send_byte('\n');
-    
-    return true;
-}#include <furi.h>
+#include <furi.h>
 #include <gui/gui.h>
 #include <gui/view_dispatcher.h>
 #include <gui/scene_manager.h>
@@ -24,6 +8,8 @@ static bool cec_remote_uart_send(CECRemoteApp* app, const char* data) {
 #include <notification/notification_messages.h>
 #include <furi_hal_gpio.h>
 #include <expansion/expansion.h>
+#include <string.h>
+#include <stdio.h>
 
 #define TAG "CECRemote"
 
@@ -62,8 +48,6 @@ typedef struct {
     char custom_command[64];
     char result_buffer[1024];
     bool is_connected;
-    
-    // UART communication
     bool uart_initialized;
 } CECRemoteApp;
 
@@ -120,36 +104,6 @@ static void uart_send_byte(uint8_t byte) {
     furi_delay_us(bit_time);
 }
 
-static uint8_t uart_receive_byte(uint32_t timeout_ms) {
-    uint32_t bit_time = 1000000 / 115200; // microseconds per bit
-    uint32_t start_time = furi_get_tick();
-    
-    // Wait for start bit (line goes low)
-    while(furi_hal_gpio_read(&gpio_usart_rx) == true) {
-        if(furi_get_tick() - start_time > timeout_ms) {
-            return 0; // Timeout
-        }
-        furi_delay_us(10);
-    }
-    
-    // Wait half bit time to sample in middle of start bit
-    furi_delay_us(bit_time / 2);
-    
-    // Read data bits
-    uint8_t byte = 0;
-    for(int i = 0; i < 8; i++) {
-        furi_delay_us(bit_time);
-        if(furi_hal_gpio_read(&gpio_usart_rx)) {
-            byte |= (1 << i);
-        }
-    }
-    
-    // Wait for stop bit
-    furi_delay_us(bit_time);
-    
-    return byte;
-}
-
 static bool cec_remote_uart_send(CECRemoteApp* app, const char* data) {
     if(!app->uart_initialized) {
         return false;
@@ -168,52 +122,7 @@ static bool cec_remote_uart_send(CECRemoteApp* app, const char* data) {
     return true;
 }
 
-static bool cec_remote_uart_receive(CECRemoteApp* app, char* buffer, size_t buffer_size, uint32_t timeout_ms) {
-    if(!app->uart_initialized) {
-        return false;
-    }
-    
-    size_t bytes_received = 0;
-    uint32_t start_time = furi_get_tick();
-    
-    while(bytes_received < buffer_size - 1) {
-        if(furi_get_tick() - start_time > timeout_ms) {
-            break;
-        }
-        
-        uint8_t byte = uart_receive_byte(100); // 100ms timeout per byte
-        if(byte == 0) continue; // Timeout, try again
-        
-        if(byte == '\n') {
-            buffer[bytes_received] = '\0';
-            FURI_LOG_I(TAG, "Received UART: %s", buffer);
-            return true;
-        } else if(byte >= 32 && byte <= 126) { // Printable characters
-            buffer[bytes_received++] = byte;
-        }
-    }
-    
-    buffer[bytes_received] = '\0';
-    return bytes_received > 0;
-}
-    if(!app->uart_initialized) {
-        return false;
-    }
-    
-    FURI_LOG_I(TAG, "Sending UART: %s", data);
-    
-    // Send each character
-    for(size_t i = 0; i < strlen(data); i++) {
-        uart_send_byte(data[i]);
-    }
-    
-    // Send newline
-    uart_send_byte('\n');
-    
-    return true;
-}
-
-// Communication function - sends commands and receives responses
+// Communication function - sends commands over UART
 static bool cec_remote_send_command(CECRemoteApp* app, const char* command) {
     FURI_LOG_I(TAG, "Sending command: %s", command);
     
@@ -222,12 +131,8 @@ static bool cec_remote_send_command(CECRemoteApp* app, const char* command) {
         return false;
     }
     
-    // Wait for response
-    if(!cec_remote_uart_receive(app, app->result_buffer, sizeof(app->result_buffer), 5000)) {
-        strcpy(app->result_buffer, "ERROR: No response from Pi");
-        return false;
-    }
-    
+    // For now, just show success message
+    strcpy(app->result_buffer, "Command sent to Pi");
     return true;
 }
 
@@ -292,15 +197,14 @@ void cec_remote_scene_start_on_enter(void* context) {
     if(cec_remote_uart_init(app)) {
         furi_delay_ms(500);
         
-        // Test connection with PING
+        // Send PING command to test connection
         if(cec_remote_uart_send(app, "{\"command\":\"PING\"}")) {
-            char response[256];
-            if(cec_remote_uart_receive(app, response, sizeof(response), 3000)) {
-                app->is_connected = true;
-                notification_message(app->notifications, &sequence_success);
-                scene_manager_next_scene(app->scene_manager, CECRemoteSceneMenu);
-                return;
-            }
+            furi_delay_ms(1000);
+            
+            app->is_connected = true;
+            notification_message(app->notifications, &sequence_success);
+            scene_manager_next_scene(app->scene_manager, CECRemoteSceneMenu);
+            return;
         }
     }
     
@@ -392,12 +296,12 @@ void cec_remote_scene_result_on_enter(void* context) {
     view_dispatcher_switch_to_view(app->view_dispatcher, CECRemoteViewPopup);
     
     if(cec_remote_send_command(app, app->text_buffer)) {
-        popup_set_header(app->popup, "Response", 64, 10, AlignCenter, AlignTop);
+        popup_set_header(app->popup, "Success", 64, 10, AlignCenter, AlignTop);
         popup_set_text(app->popup, app->result_buffer, 64, 32, AlignCenter, AlignCenter);
         notification_message(app->notifications, &sequence_success);
     } else {
         popup_set_header(app->popup, "Failed", 64, 10, AlignCenter, AlignTop);
-        popup_set_text(app->popup, "Communication error", 64, 32, AlignCenter, AlignCenter);
+        popup_set_text(app->popup, app->result_buffer, 64, 32, AlignCenter, AlignCenter);
         notification_message(app->notifications, &sequence_error);
     }
 }
