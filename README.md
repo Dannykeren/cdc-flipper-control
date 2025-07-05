@@ -44,6 +44,9 @@ This will:
 
 - Download the latest `.fap` file from [Releases](https://github.com/dannykeren/cec-flipper-control/releases)
 - Copy to `SD Card/apps/GPIO/cec_remote.fap`
+- Flipper TX (pin 13) → Pi RX (pin 10)
+  Flipper RX (pin 14) → Pi TX (pin 8)
+  Flipper GND (pin 11) → Pi GND (pin 6)
 - **Note**: This app requires Momentum firmware
 
 ## 🔌 Hardware Setup
@@ -51,7 +54,7 @@ This will:
 1. **Connect HDMI**: Raspberry Pi to your CEC-compatible TV/display
 2. **Enable CEC**: Check your TV settings and enable CEC (Samsung: Anynet+, LG: SIMPLINK, Sony: Bravia Sync)
 3. **Power On**: Boot up the Raspberry Pi
-
+4. 
 ## 📱 Usage
 
 ### Testing via WiFi (Mac/PC)
