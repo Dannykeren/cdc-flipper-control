@@ -26,10 +26,10 @@ PI_MODEL=$(cat /proc/device-tree/model)
 echo "Detected: $PI_MODEL"
 
 if [[ "$PI_MODEL" == *"Pi Zero 2"* ]]; then
-    # Pi Zero 2 W uses dwc_otg
-    USB_OVERLAY="dwc_otg"
-    USB_MODULE="dwc_otg"
-    echo "Using dwc_otg overlay for Pi Zero 2 W"
+    # Pi Zero 2 W uses dwc2
+    USB_OVERLAY="dwc2"
+    USB_MODULE="libcomposite"
+    echo "Using dwc2 overlay for Pi Zero 2 W"
 else
     # Other Pi models use dwc2
     USB_OVERLAY="dwc2"
