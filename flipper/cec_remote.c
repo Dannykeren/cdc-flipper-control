@@ -14,6 +14,17 @@
 
 #define TAG "CECRemote"
 
+int32_t cec_remote_app(void* p) {
+    UNUSED(p);
+    CECRemoteApp* app = cec_remote_app_alloc();
+
+    scene_manager_next_scene(app->scene_manager, CECRemoteSceneStart);
+    view_dispatcher_run(app->view_dispatcher);
+
+    cec_remote_app_free(app);
+    return 0;
+}
+
 typedef enum {
     CECRemoteViewSubmenu,
     CECRemoteViewTextInput,
