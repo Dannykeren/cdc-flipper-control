@@ -1,79 +1,6 @@
-static uint8_t uart_receive_byte(uint32_t timeout_ms) {
-    uint32_t bit_time = 1000000 / 115200; // microseconds per bit
-    uint32_t start_time = furi_get_tick();
-    
-    // Wait for start bit (line goes low)
-    while(furi_hal_gpio_read(&gpio_usart_rx) == true) {
-        if(furi_get_tick() - start_time > timeout_ms) {
-            return 0; // Timeout
-        }
-        furi_delay_us(10);
-    }
-    
-    // Wait half bit time to sample in middle of start bit
-    furi_delay_us(bit_time / 2);
-    
-    // Read data bits
-    uint8_t byte = 0;
-    for(int i = 0; i < 8; i++) {
-        furi_delay_us(bit_time);
-        if(furi_hal_gpio_read(&gpio_usart_rx)) {
-            byte |= (1 << i);
-        }
-    }
-    
-    // Wait for stop bit
-    furi_delay_us(bit_time);
-    
-    return byte;
-}
-
-static bool cec_remote_uart_receive(CECRemoteApp* app, char* buffer, size_t buffer_size, uint32_t timeout_ms) {
-    if(!app->uart_initialized) {
-        return false;
-    }
-    
-    size_t bytes_received = 0;
-    uint32_t start_time = furi_get_tick();
-    
-    while(bytes_received < buffer_size - 1) {
-        if(furi_get_tick() - start_time > timeout_ms) {
-            break;
-        }
-        
-        uint8_t byte = uart_receive_byte(100); // 100ms timeout per byte
-        if(byte == 0) continue; // Timeout, try again
-        
-        if(byte == '\n') {
-            buffer[bytes_received] = '\0';
-            FURI_LOG_I(TAG, "Received UART: %s", buffer);
-            return true;
-        } else if(byte >= 32 && byte <= 126) { // Printable characters
-            buffer[bytes_received++] = byte;
-        }
-    }
-    
-    buffer[bytes_received] = '\0';
-    return bytes_received > 0;
-}
-
-static bool cec_remote_uart_send(CECRemoteApp* app, const char* data) {
-    if(!app->uart_initialized) {
-        return false;
-    }
-    
-    FURI_LOG_I(TAG, "Sending UART: %s", data);
-    
-    // Send each character
-    for(size_t i = 0; i < strlen(data); i++) {
-        uart_send_byte(data[i]);
-    }
-    
-    // Send newline
-    uart_send_byte('\n');
-    
-    return true;
-}#include <furi.h>
+#include <stdint.h>
+#include <stddef.h>
+#include <furi.h>
 #include <gui/gui.h>
 #include <gui/view_dispatcher.h>
 #include <gui/scene_manager.h>
@@ -237,6 +164,8 @@ static bool cec_remote_uart_receive(CECRemoteApp* app, char* buffer, size_t buff
     buffer[bytes_received] = '\0';
     return bytes_received > 0;
 }
+
+static bool cec_remote_uart_send(CECRemoteApp* app, const char* data) {
     if(!app->uart_initialized) {
         return false;
     }
