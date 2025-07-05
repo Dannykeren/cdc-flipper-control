@@ -115,6 +115,16 @@ fi
 
 chmod +x $INSTALL_DIR/main.py
 
+# Download HTTP test server
+if curl -sSL "https://raw.githubusercontent.com/dannykeren/cec-flipper-control/main/rpi/http_test.py" > $INSTALL_DIR/http_test.py; then
+    echo "✅ Downloaded http_test.py"
+else
+    echo "❌ Failed to download http_test.py"
+    exit 1
+fi
+
+chmod +x $INSTALL_DIR/http_test.py
+
 cat > /etc/systemd/system/usb-gadget.service << 'EOFINNER'
 [Unit]
 Description=Setup USB Gadget for CEC Control
