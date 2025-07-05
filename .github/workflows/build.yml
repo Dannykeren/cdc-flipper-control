@@ -26,6 +26,23 @@ jobs:
       run: |
         cd flipper
         ufbt build
+        
+    - name: List build output (debug)
+      run: |
+        echo "Contents of flipper directory:"
+        ls -la flipper/
+        echo "Looking for .fap files:"
+        find flipper/ -name "*.fap" -type f
+        echo "Looking for dist directory:"
+        find flipper/ -name "dist" -type d
+        
+    - name: Create dist directory and copy fap
+      run: |
+        cd flipper
+        mkdir -p dist
+        # Find the .fap file wherever it is and copy to dist
+        find . -name "*.fap" -type f -exec cp {} dist/ \;
+        ls -la dist/
     
     - name: Upload app artifacts
       uses: actions/upload-artifact@v4
