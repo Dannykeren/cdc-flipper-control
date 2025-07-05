@@ -75,12 +75,8 @@ static void cec_remote_uart_rx_callback(FuriHalSerialHandle* handle, FuriHalSeri
     CECRemoteApp* app = (CECRemoteApp*)context;
     
     if(event == FuriHalSerialRxEventData) {
-        uint8_t data[64];
-        size_t data_size = furi_hal_serial_async_rx(handle, data, sizeof(data));
-        
-        if(data_size > 0) {
-            furi_stream_buffer_send(app->rx_stream, data, data_size, 0);
-        }
+        uint8_t byte = furi_hal_serial_async_rx(handle);
+        furi_stream_buffer_send(app->rx_stream, &byte, 1, 0);
     }
 }
 
