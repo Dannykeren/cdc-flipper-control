@@ -1,17 +1,4 @@
-// Samsung-specific commands (with DB10E volume commands)
-static const CECCommand samsung_commands[] = {
-    {"POWER_ON", "{\"command\":\"CUSTOM\",\"cec_command\":\"on 0\"}"},
-    {"POWER_OFF", "{\"command\":\"CUSTOM\",\"cec_command\":\"standby 0\"}"},
-    {"HDMI_1", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 4F:82:10:00\"}"},
-    {"HDMI_2", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 4F:82:20:00\"}"},
-    {"HDMI_3", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 4F:82:30:00\"}"},
-    {"HDMI_4", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 4F:82:40:00\"}"},
-    {"VOLUME_UP", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 0F:44:41\"}"},
-    {"VOLUME_DOWN", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 0F:44:42\"}"},
-    {"MUTE", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 0F:44:43\"}"},
-    {"SCAN", "{\"command\":\"SCAN\"}"},
-    {"STATUS", "{\"command\":\"STATUS\"}"},
-};#include <stdint.h>
+#include <stdint.h>
 #include <stddef.h>
 #include <furi.h>
 #include <gui/gui.h>
