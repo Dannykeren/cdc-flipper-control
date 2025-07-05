@@ -41,6 +41,7 @@ typedef struct {
     NotificationApp* notifications;
     
     char text_buffer[256];
+    char custom_command[128];  // Separate buffer for custom commands
     char result_buffer[1024];
     bool is_connected;
 } CECRemoteApp;
@@ -88,19 +89,23 @@ static void cec_remote_menu_callback(void* context, uint32_t index) {
     
     switch(index) {
         case CECRemoteMenuPowerOn:
-            strcpy(app->text_buffer, "{\"command\":\"POWER_ON\"}");
+            strncpy(app->text_buffer, "{\"command\":\"POWER_ON\"}", sizeof(app->text_buffer) - 1);
+            app->text_buffer[sizeof(app->text_buffer) - 1] = '\0';
             scene_manager_next_scene(app->scene_manager, CECRemoteSceneResult);
             break;
         case CECRemoteMenuPowerOff:
-            strcpy(app->text_buffer, "{\"command\":\"POWER_OFF\"}");
+            strncpy(app->text_buffer, "{\"command\":\"POWER_OFF\"}", sizeof(app->text_buffer) - 1);
+            app->text_buffer[sizeof(app->text_buffer) - 1] = '\0';
             scene_manager_next_scene(app->scene_manager, CECRemoteSceneResult);
             break;
         case CECRemoteMenuScan:
-            strcpy(app->text_buffer, "{\"command\":\"SCAN\"}");
+            strncpy(app->text_buffer, "{\"command\":\"SCAN\"}", sizeof(app->text_buffer) - 1);
+            app->text_buffer[sizeof(app->text_buffer) - 1] = '\0';
             scene_manager_next_scene(app->scene_manager, CECRemoteSceneResult);
             break;
         case CECRemoteMenuStatus:
-            strcpy(app->text_buffer, "{\"command\":\"STATUS\"}");
+            strncpy(app->text_buffer, "{\"command\":\"STATUS\"}", sizeof(app->text_buffer) - 1);
+            app->text_buffer[sizeof(app->text_buffer) - 1] = '\0';
             scene_manager_next_scene(app->scene_manager, CECRemoteSceneResult);
             break;
         case CECRemoteMenuCustom:
@@ -113,11 +118,26 @@ static void cec_remote_menu_callback(void* context, uint32_t index) {
 static void cec_remote_text_input_callback(void* context) {
     CECRemoteApp* app = context;
     
-    // Format custom command
-    char temp[256];
-    snprintf(temp, sizeof(temp), "%s", app->text_buffer);
-    snprintf(app->text_buffer, sizeof(app->text_buffer), 
-             "{\"command\":\"CUSTOM\",\"cec_command\":\"%s\"}", temp);
+    // Safely format custom command with proper bounds checking
+    // JSON overhead: {"command":"CUSTOM","cec_command":""} = 38 characters
+    // So we need to limit the custom command to 256 - 38 - 1 = 217 characters
+    const size_t json_overhead = 38;
+    const size_t max_cmd_len = sizeof(app->text_buffer) - json_overhead - 1;
+    
+    // Truncate custom command if too long
+    if(strlen(app->custom_command) > max_cmd_len) {
+        app->custom_command[max_cmd_len] = '\0';
+    }
+    
+    // Now safely format the JSON
+    int result = snprintf(app->text_buffer, sizeof(app->text_buffer),
+                         "{\"command\":\"CUSTOM\",\"cec_command\":\"%s\"}", 
+                         app->custom_command);
+    
+    // Ensure null termination (snprintf should handle this, but be safe)
+    if(result >= (int)sizeof(app->text_buffer)) {
+        app->text_buffer[sizeof(app->text_buffer) - 1] = '\0';
+    }
     
     scene_manager_next_scene(app->scene_manager, CECRemoteSceneResult);
 }
@@ -185,8 +205,8 @@ void cec_remote_scene_custom_on_enter(void* context) {
         app->text_input,
         cec_remote_text_input_callback,
         app,
-        app->text_buffer,
-        sizeof(app->text_buffer),
+        app->custom_command,  // Use separate buffer for input
+        sizeof(app->custom_command),
         true);
     
     view_dispatcher_switch_to_view(app->view_dispatcher, CECRemoteViewTextInput);
@@ -289,6 +309,11 @@ const SceneManagerHandlers cec_remote_scene_handlers = {
 // App allocation and deallocation
 static CECRemoteApp* cec_remote_app_alloc(void) {
     CECRemoteApp* app = malloc(sizeof(CECRemoteApp));
+    
+    // Initialize all buffers to empty strings
+    memset(app->text_buffer, 0, sizeof(app->text_buffer));
+    memset(app->custom_command, 0, sizeof(app->custom_command));
+    memset(app->result_buffer, 0, sizeof(app->result_buffer));
     
     app->gui = furi_record_open(RECORD_GUI);
     app->notifications = furi_record_open(RECORD_NOTIFICATION);
