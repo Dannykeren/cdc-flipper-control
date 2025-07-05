@@ -20,84 +20,12 @@ apt install -y cec-utils python3-pip python3-venv git
 
 echo "🔧 Configuring USB gadget mode..."
 
-# Detect Pi model and use correct USB overlay
-PI_MODEL=$(cat /proc/device-tree/model)
-echo "Detected: $PI_MODEL"
-
-if [[ "$PI_MODEL" == *"Pi Zero 2"* ]]; then
-    # Pi Zero 2 W uses dwc_otg
-    USB_OVERLAY="dwc_otg"
-    USB_MODULE="dwc_otg"
-    echo "Using dwc_otg overlay for Pi Zero 2 W"
-else
-    # Other Pi models use dwc2
-    USB_OVERLAY="dwc2"
-    USB_MODULE="libcomposite"
-    echo "Using dwc2 overlay for this Pi model"
-fi
-
-# Add USB overlay to boot config
-if ! grep -q "^dtoverlay=$USB_OVERLAY" /boot/config.txt && ! grep -q "^dtoverlay=$USB_OVERLAY," /boot/config.txt; then
-    # Remove any existing USB overlays first
-    sed -i '/^dtoverlay=dwc/d' /boot/config.txt
-    if [[ "$USB_OVERLAY" == "dwc_otg" ]]; then
-       echo "dtoverlay=$USB_OVERLAY,dr_mode=otg" >> /boot/config.txt
-       echo "dwc_otg.lpm_enable=0 dwc_otg.fiq_enable=1 dwc_otg.fiq_fsm_enable=1 dwc_otg.nak_holdoff=1" >> /boot/cmdline.txt    else
-       echo "dtoverlay=$USB_OVERLAY" >> /boot/config.txt
-    fi
-    echo "✅ Added $USB_OVERLAY overlay to boot config"
-fi
-
-# Add required modules
-if ! grep -q "^libcomposite" /etc/modules; then
-    echo "libcomposite" >> /etc/modules
-    echo "✅ Added libcomposite to modules"
-fi
-
-if [[ "$USB_MODULE" == "dwc_otg" ]] && ! grep -q "^dwc_otg" /etc/modules; then
-    echo "dwc_otg" >> /etc/modules
-    echo "✅ Added dwc_otg to modules"
-fi
-
 INSTALL_DIR="/opt/cec-flipper"
 mkdir -p $INSTALL_DIR
 
 python3 -m venv $INSTALL_DIR/venv
 source $INSTALL_DIR/venv/bin/activate
 pip install pyserial
-
-cat > /usr/local/bin/setup-usb-gadget.sh << 'EOFINNER'
-#!/bin/bash
-cd /sys/kernel/config/usb_gadget/
-mkdir -p cec_flipper 2>/dev/null || true
-cd cec_flipper
-
-echo 0x1d6b > idVendor
-echo 0x0104 > idProduct
-echo 0x0100 > bcdDevice
-echo 0x0200 > bcdUSB
-
-mkdir -p strings/0x409
-echo "CEC Flipper" > strings/0x409/manufacturer
-echo "RPi CEC Interface" > strings/0x409/product
-echo "001" > strings/0x409/serialnumber
-
-mkdir -p configs/c.1/strings/0x409
-echo "CEC Config" > configs/c.1/strings/0x409/configuration
-echo 250 > configs/c.1/MaxPower
-
-mkdir -p functions/acm.usb0
-ln -sf functions/acm.usb0 configs/c.1/ 2>/dev/null || true
-
-ls /sys/class/udc > UDC 2>/dev/null || true
-
-sleep 2
-if [ -e /dev/ttyGS0 ]; then
-    chmod 666 /dev/ttyGS0
-fi
-EOFINNER
-
-chmod +x /usr/local/bin/setup-usb-gadget.sh
 
 echo "📥 Downloading application files..."
 
@@ -127,20 +55,6 @@ else
 fi
 
 chmod +x $INSTALL_DIR/http_test.py
-
-cat > /etc/systemd/system/usb-gadget.service << 'EOFINNER'
-[Unit]
-Description=Setup USB Gadget for CEC Control
-After=local-fs.target
-
-[Service]
-Type=oneshot
-ExecStart=/usr/local/bin/setup-usb-gadget.sh
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-EOFINNER
 
 cat > /etc/systemd/system/cec-flipper.service << EOFINNER
 [Unit]
