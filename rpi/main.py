@@ -43,10 +43,12 @@ class CECController:
                 if self.uart_serial.in_waiting > 0:
                     line = self.uart_serial.readline().decode('utf-8').strip()
                     if line:
-                        logger.info(f"UART received: {line}")
+                        logger.info(f"UART received: '{line}' (length: {len(line)})")
                         response = self.process_command(line)
                         self.uart_serial.write((response + '\n').encode('utf-8'))
                         logger.info(f"UART sent: {response}")
+                    else:
+                        logger.info("UART received empty line")
                 time.sleep(0.1)
             except Exception as e:
                 logger.error(f"UART error: {e}")
