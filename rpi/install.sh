@@ -32,9 +32,9 @@ if ! grep -q "dtparam=uart=on" /boot/config.txt; then
     echo "dtparam=uart=on" >> /boot/config.txt
 fi
 # Remove console from UART and fix nr_uarts
-sed -i 's/console=serial0,115200 //' /boot/cmdline.txt
-sed -i 's/console=ttyAMA0,115200 //' /boot/cmdline.txt
-sed -i 's/8250.nr_uarts=0/8250.nr_uarts=1/' /boot/cmdline.txt
+sed -i 's/console=serial0,115200 //' /boot/firmware/cmdline.txt
+sed -i 's/console=ttyAMA0,115200 //' /boot/firmware/cmdline.txt
+sed -i 's/8250.nr_uarts=0/8250.nr_uarts=1/' /boot/firmware/cmdline.txt
 
 echo "🏗️ Setting up application..."
 INSTALL_DIR="/opt/cec-flipper"
