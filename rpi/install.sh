@@ -19,22 +19,41 @@ echo "📦 Installing required packages..."
 apt install -y cec-utils python3-pip python3-venv git
 
 echo "🔧 Enabling UART for Flipper communication..."
-# Remove conflicting overlay first
-sed -i '/dtoverlay=miniuart-bt/d' /boot/config.txt
-# Enable UART and disable Bluetooth (check if already exists first)
-if ! grep -q "enable_uart=1" /boot/config.txt; then
-    echo "enable_uart=1" >> /boot/config.txt
+# Remove conflicting overlay first (check both config locations)
+sed -i '/dtoverlay=miniuart-bt/d' /boot/config.txt 2>/dev/null || true
+sed -i '/dtoverlay=miniuart-bt/d' /boot/firmware/config.txt 2>/dev/null || true
+
+# Enable UART in the correct config file location
+CONFIG_FILE="/boot/firmware/config.txt"
+if [ ! -f "$CONFIG_FILE" ]; then
+    CONFIG_FILE="/boot/config.txt"
 fi
-if ! grep -q "dtoverlay=disable-bt" /boot/config.txt; then
-    echo "dtoverlay=disable-bt" >> /boot/config.txt
+
+# Add UART settings to correct config file
+if ! grep -q "enable_uart=1" "$CONFIG_FILE"; then
+    echo "enable_uart=1" >> "$CONFIG_FILE"
 fi
-if ! grep -q "dtparam=uart=on" /boot/config.txt; then
-    echo "dtparam=uart=on" >> /boot/config.txt
+if ! grep -q "dtoverlay=disable-bt" "$CONFIG_FILE"; then
+    echo "dtoverlay=disable-bt" >> "$CONFIG_FILE"
 fi
+if ! grep -q "dtparam=uart=on" "$CONFIG_FILE"; then
+    echo "dtparam=uart=on" >> "$CONFIG_FILE"
+fi
+
+# Fix cmdline.txt in correct location
+CMDLINE_FILE="/boot/firmware/cmdline.txt"
+if [ ! -f "$CMDLINE_FILE" ]; then
+    CMDLINE_FILE="/boot/cmdline.txt"
+fi
+
 # Remove console from UART and fix nr_uarts
-sed -i 's/console=serial0,115200 //' /boot/firmware/cmdline.txt
-sed -i 's/console=ttyAMA0,115200 //' /boot/firmware/cmdline.txt
-sed -i 's/8250.nr_uarts=0/8250.nr_uarts=1/' /boot/firmware/cmdline.txt
+sed -i 's/console=serial0,115200 //' "$CMDLINE_FILE"
+sed -i 's/console=ttyAMA0,115200 //' "$CMDLINE_FILE"
+sed -i 's/8250.nr_uarts=0/8250.nr_uarts=1/' "$CMDLINE_FILE"
+# Add nr_uarts=1 if not present
+if ! grep -q "8250.nr_uarts" "$CMDLINE_FILE"; then
+    sed -i 's/rootwait/rootwait 8250.nr_uarts=1/' "$CMDLINE_FILE"
+fi
 
 echo "🏗️ Setting up application..."
 INSTALL_DIR="/opt/cec-flipper"
