@@ -642,9 +642,10 @@ void cec_remote_scene_result_on_enter(void* context) {
         popup_set_header(app->popup, "Result", 64, 10, AlignCenter, AlignTop);
         
         // Create display text with BrightSign code if available
-        char display_text[256];
+        char display_text[128];  // Appropriate size for Flipper popup
         if(strlen(app->brightsign_code) > 0) {
-            snprintf(display_text, sizeof(display_text), "%s\n\nBrightSign:\n%s", 
+            // Safely format with strict length limits for small screen
+            snprintf(display_text, sizeof(display_text), "%.50s\n\n%.20s", 
                     app->result_buffer, app->brightsign_code);
         } else {
             strncpy(display_text, app->result_buffer, sizeof(display_text) - 1);
