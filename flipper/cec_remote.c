@@ -1,4 +1,53 @@
-#include <stdint.h>
+// Generic commands (simple and direct)
+static const CECCommand generic_commands[] = {
+    {"POWER_ON", "{\"command\":\"CUSTOM\",\"cec_command\":\"on 0\"}", ""},
+    {"POWER_OFF", "{\"command\":\"CUSTOM\",\"cec_command\":\"standby 0\"}", ""},
+    {"HDMI_1", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 4F:82:10:00\"}", "4F821000"},
+    {"HDMI_2", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 4F:82:20:00\"}", "4F822000"},
+    {"HDMI_3", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 4F:82:30:00\"}", "4F823000"},
+    {"HDMI_4", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 4F:82:40:00\"}", "4F824000"},
+    {"VOLUME_UP", "{\"command\":\"CUSTOM\",\"cec_command\":\"volup\"}", ""},
+    {"VOLUME_DOWN", "{\"command\":\"CUSTOM\",\"cec_command\":\"voldown\"}", ""},
+    {"MUTE", "{\"command\":\"CUSTOM\",\"cec_command\":\"mute\"}", ""},
+    {"SCAN", "{\"command\":\"SCAN\"}", ""},
+    {"STATUS", "{\"command\":\"STATUS\"}", ""},
+};
+
+// Samsung-specific commands
+static const CECCommand samsung_commands[] = {
+    {"POWER_ON", "{\"command\":\"CUSTOM\",\"cec_command\":\"on 0\"}", ""},
+    {"POWER_OFF", "{\"command\":\"CUSTOM\",\"cec_command\":\"standby 0\"}", ""},
+    {"HDMI_1", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 4F:82:10:00\"}", "4F821000"},
+    {"HDMI_2", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 4F:82:20:00\"}", "4F822000"},
+    {"HDMI_3", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 4F:82:30:00\"}", "4F823000"},
+    {"HDMI_4", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 4F:82:40:00\"}", "4F824000"},
+    {"VOLUME_UP", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 4F:44:41\"}", "4F4441"},
+    {"VOLUME_DOWN", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 4F:44:42\"}", "4F4442"},
+    {"MUTE", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 4F:44:43\"}", "4F4443"},
+    {"SCAN", "{\"command\":\"SCAN\"}", ""},
+    {"STATUS", "{\"command\":\"STATUS\"}", ""},
+};
+
+// Optoma-specific commands
+static const CECCommand optoma_commands[] = {
+    {"POWER_ON", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 10:04\"}", ""},
+    {"POWER_OFF", "{\"command\":\"CUSTOM\",\"cec_command\":\"standby 0\"}", ""},
+    {"HDMI_1", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 10:82:10:00\"}", "10821000"},
+    {"HDMI_2", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 10:82:20:00\"}", "10822000"},
+    {"HDMI_3", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 10:82:30:00\"}", "10823000"},
+    {"HDMI_4", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 10:82:40:00\"}", "10824000"},
+    {"VOLUME_UP", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 10:44:41\"}", "104441"},
+    {"VOLUME_DOWN", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 10:44:42\"}", "104442"},
+    {"MUTE", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 10:44:43\"}", "104443"},
+    {"SCAN", "{\"command\":\"SCAN\"}", ""},
+    {"STATUS", "{\"command\":\"STATUS\"}", ""},
+};
+
+// NEC-specific commands
+static const CECCommand nec_commands[] = {
+    {"POWER_ON", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 10:04\"}", ""},
+    {"POWER_OFF", "{\"command\":\"CUSTOM\",\"cec_command\":\"standby 0\"}", ""},
+    {"HDMI_1", "{\"command\":\"CUSTOM\",\"c#include <stdint.h>
 #include <stddef.h>
 #include <furi.h>
 #include <gui/gui.h>
@@ -109,23 +158,23 @@ typedef struct {
 
 // Generic commands (simple and direct)
 static const CECCommand generic_commands[] = {
-    {"POWER_ON", "{\"command\":\"CUSTOM\",\"cec_command\":\"on 0\"}", ""},
-    {"POWER_OFF", "{\"command\":\"CUSTOM\",\"cec_command\":\"standby 0\"}", ""},
+    {"POWER_ON", "{\"command\":\"CUSTOM\",\"cec_command\":\"on 0\"}", "on0"},
+    {"POWER_OFF", "{\"command\":\"CUSTOM\",\"cec_command\":\"standby 0\"}", "standby0"},
     {"HDMI_1", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 4F:82:10:00\"}", "4F821000"},
     {"HDMI_2", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 4F:82:20:00\"}", "4F822000"},
     {"HDMI_3", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 4F:82:30:00\"}", "4F823000"},
     {"HDMI_4", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 4F:82:40:00\"}", "4F824000"},
-    {"VOLUME_UP", "{\"command\":\"CUSTOM\",\"cec_command\":\"volup\"}", ""},
-    {"VOLUME_DOWN", "{\"command\":\"CUSTOM\",\"cec_command\":\"voldown\"}", ""},
-    {"MUTE", "{\"command\":\"CUSTOM\",\"cec_command\":\"mute\"}", ""},
-    {"SCAN", "{\"command\":\"SCAN\"}", ""},
-    {"STATUS", "{\"command\":\"STATUS\"}", ""},
+    {"VOLUME_UP", "{\"command\":\"CUSTOM\",\"cec_command\":\"volup\"}", "volup"},
+    {"VOLUME_DOWN", "{\"command\":\"CUSTOM\",\"cec_command\":\"voldown\"}", "voldown"},
+    {"MUTE", "{\"command\":\"CUSTOM\",\"cec_command\":\"mute\"}", "mute"},
+    {"SCAN", "{\"command\":\"SCAN\"}", "scan"},
+    {"STATUS", "{\"command\":\"STATUS\"}", "pow0"},
 };
 
 // Samsung-specific commands
 static const CECCommand samsung_commands[] = {
-    {"POWER_ON", "{\"command\":\"CUSTOM\",\"cec_command\":\"on 0\"}", ""},
-    {"POWER_OFF", "{\"command\":\"CUSTOM\",\"cec_command\":\"standby 0\"}", ""},
+    {"POWER_ON", "{\"command\":\"CUSTOM\",\"cec_command\":\"on 0\"}", "on0"},
+    {"POWER_OFF", "{\"command\":\"CUSTOM\",\"cec_command\":\"standby 0\"}", "standby0"},
     {"HDMI_1", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 4F:82:10:00\"}", "4F821000"},
     {"HDMI_2", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 4F:82:20:00\"}", "4F822000"},
     {"HDMI_3", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 4F:82:30:00\"}", "4F823000"},
@@ -133,14 +182,14 @@ static const CECCommand samsung_commands[] = {
     {"VOLUME_UP", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 4F:44:41\"}", "4F4441"},
     {"VOLUME_DOWN", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 4F:44:42\"}", "4F4442"},
     {"MUTE", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 4F:44:43\"}", "4F4443"},
-    {"SCAN", "{\"command\":\"SCAN\"}", ""},
-    {"STATUS", "{\"command\":\"STATUS\"}", ""},
+    {"SCAN", "{\"command\":\"SCAN\"}", "scan"},
+    {"STATUS", "{\"command\":\"STATUS\"}", "pow0"},
 };
 
 // Optoma-specific commands
 static const CECCommand optoma_commands[] = {
     {"POWER_ON", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 10:04\"}", "1004"},
-    {"POWER_OFF", "{\"command\":\"CUSTOM\",\"cec_command\":\"standby 0\"}", ""},
+    {"POWER_OFF", "{\"command\":\"CUSTOM\",\"cec_command\":\"standby 0\"}", "standby0"},
     {"HDMI_1", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 10:82:10:00\"}", "10821000"},
     {"HDMI_2", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 10:82:20:00\"}", "10822000"},
     {"HDMI_3", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 10:82:30:00\"}", "10823000"},
@@ -148,14 +197,14 @@ static const CECCommand optoma_commands[] = {
     {"VOLUME_UP", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 10:44:41\"}", "104441"},
     {"VOLUME_DOWN", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 10:44:42\"}", "104442"},
     {"MUTE", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 10:44:43\"}", "104443"},
-    {"SCAN", "{\"command\":\"SCAN\"}", ""},
-    {"STATUS", "{\"command\":\"STATUS\"}", ""},
+    {"SCAN", "{\"command\":\"SCAN\"}", "scan"},
+    {"STATUS", "{\"command\":\"STATUS\"}", "pow0"},
 };
 
 // NEC-specific commands
 static const CECCommand nec_commands[] = {
     {"POWER_ON", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 10:04\"}", "1004"},
-    {"POWER_OFF", "{\"command\":\"CUSTOM\",\"cec_command\":\"standby 0\"}", ""},
+    {"POWER_OFF", "{\"command\":\"CUSTOM\",\"cec_command\":\"standby 0\"}", "standby0"},
     {"HDMI_1", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 10:82:10:00\"}", "10821000"},
     {"HDMI_2", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 10:82:20:00\"}", "10822000"},
     {"HDMI_3", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 10:82:30:00\"}", "10823000"},
@@ -163,14 +212,14 @@ static const CECCommand nec_commands[] = {
     {"VOLUME_UP", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 10:44:41\"}", "104441"},
     {"VOLUME_DOWN", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 10:44:42\"}", "104442"},
     {"MUTE", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 10:44:43\"}", "104443"},
-    {"SCAN", "{\"command\":\"SCAN\"}", ""},
-    {"STATUS", "{\"command\":\"STATUS\"}", ""},
+    {"SCAN", "{\"command\":\"SCAN\"}", "scan"},
+    {"STATUS", "{\"command\":\"STATUS\"}", "pow0"},
 };
 
 // Epson-specific commands
 static const CECCommand epson_commands[] = {
     {"POWER_ON", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 10:04\"}", "1004"},
-    {"POWER_OFF", "{\"command\":\"CUSTOM\",\"cec_command\":\"standby 0\"}", ""},
+    {"POWER_OFF", "{\"command\":\"CUSTOM\",\"cec_command\":\"standby 0\"}", "standby0"},
     {"HDMI_1", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 10:82:10:00\"}", "10821000"},
     {"HDMI_2", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 10:82:20:00\"}", "10822000"},
     {"HDMI_3", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 10:82:30:00\"}", "10823000"},
@@ -178,14 +227,14 @@ static const CECCommand epson_commands[] = {
     {"VOLUME_UP", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 10:44:41\"}", "104441"},
     {"VOLUME_DOWN", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 10:44:42\"}", "104442"},
     {"MUTE", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 10:44:43\"}", "104443"},
-    {"SCAN", "{\"command\":\"SCAN\"}", ""},
-    {"STATUS", "{\"command\":\"STATUS\"}", ""},
+    {"SCAN", "{\"command\":\"SCAN\"}", "scan"},
+    {"STATUS", "{\"command\":\"STATUS\"}", "pow0"},
 };
 
 // LG-specific commands
 static const CECCommand lg_commands[] = {
-    {"POWER_ON", "{\"command\":\"CUSTOM\",\"cec_command\":\"on 0\"}", ""},
-    {"POWER_OFF", "{\"command\":\"CUSTOM\",\"cec_command\":\"standby 0\"}", ""},
+    {"POWER_ON", "{\"command\":\"CUSTOM\",\"cec_command\":\"on 0\"}", "on0"},
+    {"POWER_OFF", "{\"command\":\"CUSTOM\",\"cec_command\":\"standby 0\"}", "standby0"},
     {"HDMI_1", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 10:44:F1\"}", "1044F1"},
     {"HDMI_2", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 10:44:F2\"}", "1044F2"},
     {"HDMI_3", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 10:44:F3\"}", "1044F3"},
@@ -193,8 +242,8 @@ static const CECCommand lg_commands[] = {
     {"VOLUME_UP", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 10:44:41\"}", "104441"},
     {"VOLUME_DOWN", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 10:44:42\"}", "104442"},
     {"MUTE", "{\"command\":\"CUSTOM\",\"cec_command\":\"tx 10:44:43\"}", "104443"},
-    {"SCAN", "{\"command\":\"SCAN\"}", ""},
-    {"STATUS", "{\"command\":\"STATUS\"}", ""},
+    {"SCAN", "{\"command\":\"SCAN\"}", "scan"},
+    {"STATUS", "{\"command\":\"STATUS\"}", "pow0"},
 };
 
 // Get commands for selected vendor
@@ -478,6 +527,9 @@ static void cec_remote_text_input_callback(void* context) {
 void cec_remote_scene_start_on_enter(void* context) {
     CECRemoteApp* app = context;
     
+    // Enable 5V output for Pi power
+    furi_hal_power_enable_otg();
+    
     popup_set_header(app->popup, "CEC Remote v3.0", 64, 10, AlignCenter, AlignTop);
     popup_set_text(app->popup, "Connecting to Pi...", 64, 32, AlignCenter, AlignCenter);
     view_dispatcher_switch_to_view(app->view_dispatcher, CECRemoteViewPopup);
@@ -641,13 +693,14 @@ void cec_remote_scene_result_on_enter(void* context) {
     if(cec_remote_send_command(app, app->text_buffer)) {
         popup_set_header(app->popup, "Result", 64, 10, AlignCenter, AlignTop);
         
-        // Create display text with BrightSign code if available
-        char display_text[128];  // Appropriate size for Flipper popup
+        // Create display text - show BrightSign code only for commands that have one
+        char display_text[128];
         if(strlen(app->brightsign_code) > 0) {
-            // Safely format with strict length limits for small screen
-            snprintf(display_text, sizeof(display_text), "%.50s\n\n%.20s", 
+            // Show result and BrightSign code with better spacing
+            snprintf(display_text, sizeof(display_text), "%.40s\n\n\n%.15s", 
                     app->result_buffer, app->brightsign_code);
         } else {
+            // Show just the result for commands without BrightSign codes
             strncpy(display_text, app->result_buffer, sizeof(display_text) - 1);
             display_text[sizeof(display_text) - 1] = '\0';
         }
