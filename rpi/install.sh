@@ -102,13 +102,14 @@ fi
 if [ -f "/tmp/icss_logo.png" ] && [ -f "/tmp/icss_text.png" ]; then
     echo "🎨 Creating display with logos..."
     convert -size 1920x1080 xc:'#1e3c72' \
-      /tmp/icss_logo.png -resize 300x300 -geometry +200+50 -composite \
-      /tmp/icss_text.png -resize 600x200 -geometry +600+100 -composite \
-      -pointsize 48 -fill '#4ecdc4' -gravity center -annotate +0+150 'Professional HDMI CEC Test Tool' \
-      -pointsize 36 -fill white -gravity center -annotate +0+220 'Powered by Raspberry Pi Zero 2 and Flipper Zero' \
-      -pointsize 28 -fill '#4ecdc4' -gravity center -annotate +0+280 'Designed by ICSS - Danny Keren' \
-      -pointsize 24 -fill white -gravity center -annotate +0+350 'Ready for Professional Field Testing' \
-      -pointsize 20 -fill '#aaaaaa' -gravity center -annotate +0+420 'Use Flipper Zero to control CEC devices' \
+      \( /tmp/icss_logo.png -resize 200x200 \) -gravity northwest -geometry +200+100 -composite \
+      \( /tmp/icss_text.png -resize 500x150 \) -gravity north -geometry +0+300 -composite \
+      -gravity center \
+      -pointsize 48 -fill '#4ecdc4' -annotate +0+100 'Professional HDMI CEC Test Tool' \
+      -pointsize 36 -fill white -annotate +0+170 'Powered by Raspberry Pi Zero 2 and Flipper Zero' \
+      -pointsize 28 -fill '#4ecdc4' -annotate +0+220 'Designed by ICSS - Danny Keren' \
+      -pointsize 24 -fill white -annotate +0+290 'Ready for Professional Field Testing' \
+      -pointsize 20 -fill '#aaaaaa' -annotate +0+350 'Use Flipper Zero to control CEC devices' \
       "$USER_HOME/icss_display.png"
 else
     echo "🎨 Creating text-only display (logos not available)..."
