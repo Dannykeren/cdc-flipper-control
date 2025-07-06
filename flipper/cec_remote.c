@@ -807,3 +807,4 @@ int32_t cec_remote_app(void* p) {
 
     cec_remote_app_free(app);
     return 0;
+}
