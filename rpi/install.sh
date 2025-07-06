@@ -1,8 +1,8 @@
 #!/bin/bash
 
 echo "========================================="
-echo "  CEC Flipper Control - Graphics Ready"
-echo "   Clean Field Deployment Solution"
+echo "     ICSS Professional CEC Tool"
+echo "    Static Display - Field Ready"
 echo "========================================="
 
 set -e
@@ -16,11 +16,11 @@ fi
 ACTUAL_USER=$(logname 2>/dev/null || echo "admin")
 USER_HOME="/home/$ACTUAL_USER"
 
-echo "🔄 Updating system for user: $ACTUAL_USER..."
+echo "🔄 Installing for user: $ACTUAL_USER..."
 apt update && apt upgrade -y
 
 echo "📦 Installing required packages..."
-apt install -y cec-utils python3-pip python3-venv git
+apt install -y cec-utils python3-pip python3-venv
 apt install -y xorg feh imagemagick openbox xinit xserver-xorg-legacy
 
 echo "🔧 Enabling UART for Flipper communication..."
@@ -29,25 +29,22 @@ if [ ! -f "$CONFIG_FILE" ]; then
     CONFIG_FILE="/boot/config.txt"
 fi
 
-# Remove conflicting settings
+# Clean UART setup
 sed -i '/dtoverlay=miniuart-bt/d' "$CONFIG_FILE"
 sed -i '/enable_uart/d' "$CONFIG_FILE"
 sed -i '/dtoverlay=disable-bt/d' "$CONFIG_FILE"
 sed -i '/dtparam=uart/d' "$CONFIG_FILE"
 
-# Add UART settings
 echo "enable_uart=1" >> "$CONFIG_FILE"
 echo "dtoverlay=disable-bt" >> "$CONFIG_FILE"
 echo "dtparam=uart=on" >> "$CONFIG_FILE"
 
 echo "🖥️ Configuring HDMI output..."
-# Remove existing HDMI settings
 sed -i '/hdmi_force_hotplug/d' "$CONFIG_FILE"
 sed -i '/hdmi_drive/d' "$CONFIG_FILE"
 sed -i '/hdmi_group/d' "$CONFIG_FILE"
 sed -i '/hdmi_mode/d' "$CONFIG_FILE"
 
-# Add HDMI settings
 echo "hdmi_force_hotplug=1" >> "$CONFIG_FILE"
 echo "hdmi_drive=2" >> "$CONFIG_FILE"
 echo "hdmi_group=2" >> "$CONFIG_FILE"
@@ -75,9 +72,7 @@ python3 -m venv $INSTALL_DIR/venv
 source $INSTALL_DIR/venv/bin/activate
 pip install pyserial
 
-echo "📥 Downloading CEC application files..."
-
-# Download main application with graphics integration
+echo "📥 Downloading CEC application..."
 if curl -sSL "https://raw.githubusercontent.com/dannykeren/cec-flipper-control/main/rpi/main.py" > $INSTALL_DIR/main.py; then
     echo "✅ Downloaded main.py"
 else
@@ -85,34 +80,29 @@ else
     exit 1
 fi
 
-# Download display update script
-if curl -sSL "https://raw.githubusercontent.com/dannykeren/cec-flipper-control/main/rpi/update_display.py" > "$USER_HOME/update_display.py"; then
-    echo "✅ Downloaded update_display.py"
-else
-    echo "❌ Failed to download update_display.py"
-    exit 1
-fi
+chmod +x $INSTALL_DIR/main.py
 
-# Download graphics creation script
-if curl -sSL "https://raw.githubusercontent.com/dannykeren/cec-flipper-control/main/rpi/create_graphics.sh" > /tmp/create_graphics.sh; then
-    echo "✅ Downloaded create_graphics.sh"
-else
-    echo "❌ Failed to download create_graphics.sh"
-    exit 1
-fi
+echo "🎨 Creating ICSS professional display..."
 
-chmod +x $INSTALL_DIR/main.py "$USER_HOME/update_display.py" /tmp/create_graphics.sh
+# Create the static ICSS professional display
+convert -size 1920x1080 xc:'#1e3c72' \
+  -gravity center \
+  -pointsize 120 -fill white -annotate 0+0-300 'ICSS' \
+  -pointsize 80 -fill white -annotate 0+0-200 'Integrated Control' \
+  -pointsize 80 -fill white -annotate 0+0-120 'Solutions' \
+  -pointsize 48 -fill '#4ecdc4' -annotate 0+0-40 'Professional HDMI CEC Test Tool' \
+  -pointsize 36 -fill white -annotate 0+0+20 'Powered by Raspberry Pi Zero 2 and Flipper Zero' \
+  -pointsize 28 -fill '#4ecdc4' -annotate 0+0+80 'Designed by ICSS - Danny Keren' \
+  -pointsize 24 -fill white -annotate 0+0+160 'Ready for Professional Field Testing' \
+  -pointsize 20 -fill '#aaaaaa' -annotate 0+0+240 'Use Flipper Zero to control CEC devices' \
+  "$USER_HOME/icss_display.png"
 
-echo "🎨 Creating professional graphics display system..."
-bash /tmp/create_graphics.sh
-
-# Set proper ownership
-chown $ACTUAL_USER:$ACTUAL_USER "$USER_HOME"/*.png "$USER_HOME/update_display.py"
+echo "✅ Created ICSS professional display"
 
 echo "🔧 Creating CEC service..."
 cat > /etc/systemd/system/cec-flipper.service << 'EOF'
 [Unit]
-Description=CEC Flipper Control - Graphics Mode
+Description=ICSS CEC Professional Tool
 After=network.target
 
 [Service]
@@ -130,7 +120,7 @@ EOF
 
 systemctl enable cec-flipper.service
 
-echo "🖥️ Setting up graphics display auto-start..."
+echo "🖥️ Setting up display auto-start..."
 
 # Configure auto-login
 mkdir -p /etc/systemd/system/getty@tty1.service.d
@@ -147,7 +137,7 @@ needs_root_rights=yes
 EOF
 
 # Create display startup script
-cat > "$USER_HOME/start_display.sh" << EOF
+cat > "$USER_HOME/start_icss_display.sh" << EOF
 #!/bin/bash
 export DISPLAY=:0
 export HOME=$USER_HOME
@@ -161,20 +151,20 @@ DISPLAY=:0 xset s off
 DISPLAY=:0 xset s noblank  
 DISPLAY=:0 xset -dpms
 
-# Start with ready status
-python3 $USER_HOME/update_display.py ready
+# Show static ICSS display
+DISPLAY=:0 feh --fullscreen --hide-pointer $USER_HOME/icss_display.png &
 EOF
 
-chmod +x "$USER_HOME/start_display.sh"
+chmod +x "$USER_HOME/start_icss_display.sh"
 
 # Create auto-start on login
 cat > "$USER_HOME/.bash_profile" << EOF
 if [ -z "\$DISPLAY" ] && [ "\$(tty)" = "/dev/tty1" ]; then
-    $USER_HOME/start_display.sh
+    $USER_HOME/start_icss_display.sh
 fi
 EOF
 
-chown $ACTUAL_USER:$ACTUAL_USER "$USER_HOME/.bash_profile" "$USER_HOME/start_display.sh"
+chown $ACTUAL_USER:$ACTUAL_USER "$USER_HOME/.bash_profile" "$USER_HOME/start_icss_display.sh" "$USER_HOME/icss_display.png"
 
 # Add user to required groups
 usermod -a -G dialout,tty,video $ACTUAL_USER
@@ -182,27 +172,26 @@ usermod -a -G dialout,tty,video $ACTUAL_USER
 systemctl set-default multi-user.target
 
 echo ""
-echo "✅ CLEAN GRAPHICS SETUP COMPLETE!"
+echo "✅ ICSS PROFESSIONAL SETUP COMPLETE!"
 echo ""
-echo "🎯 FIELD-READY FEATURES:"
-echo "   ✅ Professional graphics display with instant feedback"
-echo "   ✅ 4 status states: Ready, Sending, Success, Error"  
-echo "   ✅ Auto-start on boot (no manual intervention)"
-echo "   ✅ Zero browser dependencies (native graphics)"
-echo "   ✅ Bulletproof reliability for field deployment"
+echo "🎯 PROFESSIONAL FEATURES:"
+echo "   ✅ ICSS branded professional display"
+echo "   ✅ Static, reliable, never fails"
+echo "   ✅ Auto-start on boot - zero maintenance"
+echo "   ✅ Clean field deployment solution"
 echo ""
 echo "📱 OPERATION:"
-echo "   🔌 Power on → Graphics display shows 'Ready'"
-echo "   📱 Use Flipper → Display shows real-time status"
-echo "   ✅ Instant visual feedback for every command"
-echo "   🔧 No WiFi/SSH needed in field"
+echo "   🔌 Power on → Professional ICSS display appears"
+echo "   📱 Use Flipper Zero → Commands processed via UART"
+echo "   ✅ Reliable feedback via Flipper display"
+echo "   🏢 Professional appearance for client demos"
 echo ""
-echo "🔄 Reboot required to activate all features"
+echo "🔄 Reboot required to activate display"
 echo ""
 
-read -p "Reboot now to activate graphics display? (y/n) " -n 1 -r
+read -p "Reboot now to activate ICSS professional display? (y/n) " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
-  echo "🔄 Rebooting to graphics mode..."
+  echo "🔄 Rebooting to ICSS professional mode..."
   reboot
 fi
