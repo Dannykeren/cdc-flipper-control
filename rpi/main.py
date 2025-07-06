@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-CEC Flipper Control v3.0 - With Graphics Display Integration
-Clean field-ready solution with instant visual feedback
+CEC Flipper Control v3.0 - Clean Static Display Version
+Field-ready solution with static ICSS branding
 """
 import time
 import logging
@@ -17,31 +17,10 @@ from datetime import datetime
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("main")
 
-def update_hdmi_display(status):
-    """Update HDMI display status"""
-    try:
-        # Get the actual user home directory
-        actual_user = os.environ.get('SUDO_USER', 'admin')
-        user_home = f"/home/{actual_user}"
-        script_path = f"{user_home}/update_display.py"
-        
-        if os.path.exists(script_path):
-            subprocess.run([
-                'python3', script_path, status
-            ], check=False, capture_output=True)
-            logger.info(f"Updated display to: {status}")
-        else:
-            logger.warning(f"Display script not found: {script_path}")
-    except Exception as e:
-        logger.error(f"Failed to update display: {e}")
-
 def execute_cec_command(command, vendor="Unknown", timeout=10):
-    """Execute CEC command with display feedback"""
+    """Execute CEC command - clean and simple"""
     try:
         logger.info(f"Executing CEC command: {command}")
-        
-        # Show sending status
-        update_hdmi_display('sending')
         
         process = subprocess.Popen(
             ['cec-client', '-s', '-d', '1'],
@@ -54,28 +33,16 @@ def execute_cec_command(command, vendor="Unknown", timeout=10):
         stdout, stderr = process.communicate(input=command + '\n', timeout=timeout)
         
         if process.returncode == 0:
-            update_hdmi_display('success')
-            time.sleep(2)  # Show success for 2 seconds
-            update_hdmi_display('ready')  # Return to ready
             logger.info(f"✅ Command successful: {command}")
             return f"✅ Command executed: {command}"
         else:
-            update_hdmi_display('error')
-            time.sleep(2)  # Show error for 2 seconds
-            update_hdmi_display('ready')  # Return to ready
             logger.error(f"❌ Command failed: {command} - {stderr}")
             return f"❌ Command failed: {stderr}"
             
     except subprocess.TimeoutExpired:
         process.kill()
-        update_hdmi_display('error')
-        time.sleep(2)
-        update_hdmi_display('ready')
         return f"❌ Command timed out: {command}"
     except Exception as e:
-        update_hdmi_display('error')
-        time.sleep(2)
-        update_hdmi_display('ready')
         return f"❌ Error executing command: {str(e)}"
 
 class CECController:
@@ -112,7 +79,7 @@ class CECController:
                 time.sleep(1)
     
     def process_command(self, command_json):
-        """Process CEC command with graphics feedback"""
+        """Process CEC command - clean and simple"""
         try:
             command = json.loads(command_json)
             cmd_type = command.get('command', '').upper()
@@ -191,21 +158,18 @@ class CECController:
             return json.dumps({"status": "error", "result": "Invalid JSON"})
         except Exception as e:
             logger.error(f"Command processing error: {str(e)}")
-            return json.dumps({"status": "error", "result": str(e)})
+            return json.dumps({"status": "error", "result": str(e)}")
     
     def run(self):
         """Main application loop"""
         self.running = True
         
-        logger.info("🚀 CEC Controller v3.0 - Graphics Mode")
-        
-        # Initialize display to ready state
-        update_hdmi_display('ready')
+        logger.info("🚀 ICSS CEC Controller v3.0 - Professional Field Tool")
         
         # Start UART interface
         self.start_uart_interface()
         
-        logger.info("CEC Controller running with graphics display")
+        logger.info("CEC Controller running with static ICSS display")
         
         # Keep running
         while self.running:
