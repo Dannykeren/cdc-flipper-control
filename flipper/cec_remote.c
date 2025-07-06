@@ -483,19 +483,19 @@ void cec_remote_scene_start_on_enter(void* context) {
     view_dispatcher_switch_to_view(app->view_dispatcher, CECRemoteViewPopup);
     
     if(cec_remote_uart_init(app)) {
-    furi_delay_ms(500);
-    
-    if(cec_remote_uart_send(app, "{\"command\":\"PING\"}")) {
-        char response[256];
-        if(cec_remote_uart_receive(app, response, sizeof(response), 3000)) {
-            if(strstr(response, "success") || strstr(response, "pong")) {
-                app->is_connected = true;
-                notification_message(app->notifications, &sequence_success);
-                popup_set_header(app->popup, "Connected!", 64, 10, AlignCenter, AlignTop);
-                popup_set_text(app->popup, "Ready to control CEC devices", 64, 32, AlignCenter, AlignCenter);
-                furi_delay_ms(1000);
-                scene_manager_next_scene(app->scene_manager, CECRemoteSceneVendorSelect);
-                return;
+        furi_delay_ms(500);
+        
+        if(cec_remote_uart_send(app, "{\"command\":\"PING\"}")) {
+            char response[256];
+            if(cec_remote_uart_receive(app, response, sizeof(response), 3000)) {
+                if(strstr(response, "success") || strstr(response, "pong")) {
+                    app->is_connected = true;
+                    notification_message(app->notifications, &sequence_success);
+                    popup_set_header(app->popup, "Connected!", 64, 10, AlignCenter, AlignTop);
+                    popup_set_text(app->popup, "Ready to control CEC devices", 64, 32, AlignCenter, AlignCenter);
+                    furi_delay_ms(1000);
+                    scene_manager_next_scene(app->scene_manager, CECRemoteSceneVendorSelect);
+                    return;
                 }
             }
         }
