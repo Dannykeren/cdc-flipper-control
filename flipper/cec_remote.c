@@ -477,7 +477,7 @@ static void cec_remote_text_input_callback(void* context) {
 // Scene implementations
 void cec_remote_scene_start_on_enter(void* context) {
     CECRemoteApp* app = context;
-    
+    furi_hal_power_enable_otg();
     popup_set_header(app->popup, "CEC Remote v3.0", 64, 10, AlignCenter, AlignTop);
     popup_set_text(app->popup, "Connecting to Pi...", 64, 32, AlignCenter, AlignCenter);
     view_dispatcher_switch_to_view(app->view_dispatcher, CECRemoteViewPopup);
