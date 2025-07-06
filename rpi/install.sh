@@ -84,18 +84,48 @@ chmod +x $INSTALL_DIR/main.py
 
 echo "🎨 Creating ICSS professional display..."
 
-# Create the static ICSS professional display
-convert -size 1920x1080 xc:'#1e3c72' \
-  -gravity center \
-  -pointsize 120 -fill white -annotate +0-300 'ICSS' \
-  -pointsize 80 -fill white -annotate +0-200 'Integrated Control' \
-  -pointsize 80 -fill white -annotate +0-120 'Solutions' \
-  -pointsize 48 -fill '#4ecdc4' -annotate +0-40 'Professional HDMI CEC Test Tool' \
-  -pointsize 36 -fill white -annotate +0+20 'Powered by Raspberry Pi Zero 2 and Flipper Zero' \
-  -pointsize 28 -fill '#4ecdc4' -annotate +0+80 'Designed by ICSS - Danny Keren' \
-  -pointsize 24 -fill white -annotate +0+160 'Ready for Professional Field Testing' \
-  -pointsize 20 -fill '#aaaaaa' -annotate +0+240 'Use Flipper Zero to control CEC devices' \
-  "$USER_HOME/icss_display.png"
+# Download logo files
+echo "📥 Downloading ICSS logos..."
+if curl -sSL "https://raw.githubusercontent.com/dannykeren/cec-flipper-control/main/logos/icss_logo.png" > /tmp/icss_logo.png; then
+    echo "✅ Downloaded ICSS logo"
+else
+    echo "⚠️ Logo download failed, creating text-only version"
+fi
+
+if curl -sSL "https://raw.githubusercontent.com/dannykeren/cec-flipper-control/main/logos/icss_text.png" > /tmp/icss_text.png; then
+    echo "✅ Downloaded ICSS text logo"
+else
+    echo "⚠️ Text logo download failed"
+fi
+
+# Create the static ICSS professional display with logos
+if [ -f "/tmp/icss_logo.png" ] && [ -f "/tmp/icss_text.png" ]; then
+    echo "🎨 Creating display with logos..."
+    convert -size 1920x1080 xc:'#1e3c72' \
+      /tmp/icss_logo.png -resize 300x300 -geometry +200+50 -composite \
+      /tmp/icss_text.png -resize 600x200 -geometry +600+100 -composite \
+      -pointsize 48 -fill '#4ecdc4' -gravity center -annotate +0+150 'Professional HDMI CEC Test Tool' \
+      -pointsize 36 -fill white -gravity center -annotate +0+220 'Powered by Raspberry Pi Zero 2 and Flipper Zero' \
+      -pointsize 28 -fill '#4ecdc4' -gravity center -annotate +0+280 'Designed by ICSS - Danny Keren' \
+      -pointsize 24 -fill white -gravity center -annotate +0+350 'Ready for Professional Field Testing' \
+      -pointsize 20 -fill '#aaaaaa' -gravity center -annotate +0+420 'Use Flipper Zero to control CEC devices' \
+      "$USER_HOME/icss_display.png"
+else
+    echo "🎨 Creating text-only display (logos not available)..."
+    convert -size 1920x1080 xc:'#1e3c72' \
+      -gravity center \
+      -pointsize 120 -fill white -annotate +0-300 'ICSS' \
+      -pointsize 80 -fill white -annotate +0-200 'Integrated Control Solutions' \
+      -pointsize 48 -fill '#4ecdc4' -annotate +0-40 'Professional HDMI CEC Test Tool' \
+      -pointsize 36 -fill white -annotate +0+20 'Powered by Raspberry Pi Zero 2 and Flipper Zero' \
+      -pointsize 28 -fill '#4ecdc4' -annotate +0+80 'Designed by ICSS - Danny Keren' \
+      -pointsize 24 -fill white -annotate +0+160 'Ready for Professional Field Testing' \
+      -pointsize 20 -fill '#aaaaaa' -annotate +0+240 'Use Flipper Zero to control CEC devices' \
+      "$USER_HOME/icss_display.png"
+fi
+
+# Clean up temporary files
+rm -f /tmp/icss_logo.png /tmp/icss_text.png
 
 echo "✅ Created ICSS professional display"
 
