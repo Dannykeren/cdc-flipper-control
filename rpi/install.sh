@@ -1,9 +1,8 @@
 #!/bin/bash
 
 echo "========================================="
-echo "  CEC Flipper Control - Complete Setup"
-echo "   Fresh Raspberry Pi Zero W"
-echo "   + HDMI Professional Display"
+echo "  CEC Flipper Control - HDMI Auto-Fix"
+echo "   Fixing HDMI Display Auto-Launch"
 echo "========================================="
 
 set -e
@@ -19,14 +18,9 @@ apt update && apt upgrade -y
 echo "📦 Installing required packages..."
 apt install -y cec-utils python3-pip python3-venv git
 
-# Check if we're on Pi OS Lite (no GUI)
-if ! dpkg -l | grep -q "raspberrypi-ui-mods"; then
-    echo "🖥️ Installing desktop environment for HDMI display..."
-    apt install -y raspberrypi-ui-mods chromium-browser
-else
-    echo "🖥️ Desktop environment detected, installing browser..."
-    apt install -y chromium-browser
-fi
+# Install minimal X11 and browser without full desktop
+echo "🖥️ Installing minimal display environment..."
+apt install -y xorg xserver-xorg-legacy chromium-browser openbox xinit
 
 echo "🔧 Enabling UART for Flipper communication..."
 # Remove conflicting overlay first (check both config locations)
@@ -156,66 +150,88 @@ EOFINNER
 
 systemctl enable cec-flipper.service
 
-echo "🖥️ Setting up HDMI display auto-launch..."
+echo "🖥️ Setting up AUTO-LAUNCH HDMI display..."
 
-# Enable desktop environment for HDMI display
-systemctl set-default graphical.target
+# Configure auto-login for pi user (no login screen)
+mkdir -p /etc/systemd/system/getty@tty1.service.d
+cat > /etc/systemd/system/getty@tty1.service.d/autologin.conf << EOFINNER
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin pi --noclear %I $TERM
+EOFINNER
 
-# Check if desktop packages are installed
-if dpkg -l | grep -q "raspberrypi-ui-mods"; then
-    echo "✅ Desktop environment available for HDMI display"
-    
-    # Create HDMI display service
-    cat > /etc/systemd/system/cec-hdmi-display.service << EOFINNER
+# Create auto-start X11 script for pi user
+cat > /home/pi/.bash_profile << EOFINNER
+# Auto-start X11 with CEC display on login
+if [ -z "\$DISPLAY" ] && [ "\$(tty)" = "/dev/tty1" ]; then
+    startx
+fi
+EOFINNER
+
+# Create X11 startup script
+cat > /home/pi/.xinitrc << EOFINNER
+#!/bin/bash
+# Disable screen blanking
+xset s off
+xset s noblank
+xset -dpms
+
+# Start window manager
+openbox &
+
+# Wait for CEC service to be ready
+sleep 10
+
+# Launch CEC display in fullscreen browser
+chromium-browser \\
+    --kiosk \\
+    --disable-infobars \\
+    --disable-session-crashed-bubble \\
+    --disable-web-security \\
+    --disable-features=TranslateUI \\
+    --disable-ipc-flooding-protection \\
+    --window-position=0,0 \\
+    --window-size=1920,1080 \\
+    http://localhost:8080/display &
+
+# Keep X11 running
+wait
+EOFINNER
+
+chmod +x /home/pi/.xinitrc
+chown pi:pi /home/pi/.xinitrc
+chown pi:pi /home/pi/.bash_profile
+
+# Set auto-login target
+systemctl set-default multi-user.target
+
+# Create additional CEC HDMI service for redundancy
+cat > /etc/systemd/system/cec-hdmi-autostart.service << EOFINNER
 [Unit]
-Description=CEC HDMI Professional Display
-After=cec-flipper.service graphical-session.target
+Description=CEC HDMI Auto Display
+After=cec-flipper.service
 Wants=cec-flipper.service
+Conflicts=getty@tty1.service
 
 [Service]
 Type=simple
 User=pi
 Group=pi
-Environment=DISPLAY=:0
+Environment=HOME=/home/pi
+WorkingDirectory=/home/pi
 ExecStartPre=/bin/sleep 15
-ExecStart=/usr/bin/chromium-browser --kiosk --disable-infobars --disable-session-crashed-bubble --disable-web-security http://localhost:8080/display
-Restart=on-failure
+ExecStart=/usr/bin/startx
+Restart=always
 RestartSec=10
 
 [Install]
-WantedBy=graphical.target
+WantedBy=multi-user.target
 EOFINNER
 
-    systemctl enable cec-hdmi-display.service
-    echo "✅ HDMI auto-launch service enabled"
-else
-    echo "⚠️ No desktop environment - HDMI display available via browser only"
-    echo "💡 Access at: http://[PI_IP]:8080/display"
-fi
-
-# Create user autostart directory and file (fallback)
-CURRENT_USER=$(logname 2>/dev/null || echo "pi")
-USER_HOME="/home/$CURRENT_USER"
-AUTOSTART_DIR="$USER_HOME/.config/autostart"
-
-mkdir -p "$AUTOSTART_DIR"
-chown $CURRENT_USER:$CURRENT_USER "$AUTOSTART_DIR"
-
-cat > "$AUTOSTART_DIR/cec-hdmi-display.desktop" << EOFINNER
-[Desktop Entry]
-Type=Application
-Name=CEC HDMI Display
-Exec=chromium-browser --kiosk --disable-infobars http://localhost:8080/display
-Hidden=false
-NoDisplay=false
-X-GNOME-Autostart-enabled=true
-EOFINNER
-
-chown $CURRENT_USER:$CURRENT_USER "$AUTOSTART_DIR/cec-hdmi-display.desktop"
-chmod +x "$AUTOSTART_DIR/cec-hdmi-display.desktop"
+systemctl enable cec-hdmi-autostart.service
 
 # Add user to required groups
-usermod -a -G dialout,tty $CURRENT_USER
+usermod -a -G dialout,tty,video pi
 
 echo "📺 Testing browser installation..."
 if command -v chromium-browser &> /dev/null; then
@@ -224,33 +240,46 @@ else
     echo "⚠️ Browser installation may have issues"
 fi
 
+# Create manual start script for testing
+cat > /home/pi/start_cec_display.sh << EOFINNER
+#!/bin/bash
+export DISPLAY=:0
+chromium-browser --kiosk --disable-infobars http://localhost:8080/display &
+EOFINNER
+
+chmod +x /home/pi/start_cec_display.sh
+chown pi:pi /home/pi/start_cec_display.sh
+
 echo ""
 echo "✅ Setup complete!"
 echo ""
-echo "📌 Features installed:"
-echo "   ✅ UART enabled for Flipper communication"
-echo "   ✅ HTTP server available on port 8080"
-echo "   ✅ Professional HDMI display with auto-launch"
-echo "   ✅ Samsung DB10E volume commands (tx 0F:44:41)"
-echo "   ✅ No auto-detection - fast command execution"
+echo "📌 HDMI Auto-Launch Features:"
+echo "   ✅ Auto-login configured (no login screen)"
+echo "   ✅ CEC display launches automatically on boot"
+echo "   ✅ Professional interface always visible"
+echo "   ✅ No manual 'Show on TV' needed"
 echo ""
 echo "📺 HDMI Display Features:"
 echo "   🖥️ Professional interface with your logo"
 echo "   📊 Real-time command logging and statistics"
 echo "   🔄 Auto-refreshes every 3 seconds"
-echo "   🚀 Auto-launches in browser on boot"
+echo "   🚀 Launches automatically on boot"
 echo ""
 echo "🔗 Access Methods:"
-echo "   📱 Flipper: Select '📺 Show Logs on HDMI'"
+echo "   📱 Flipper: Commands will show on HDMI automatically"
 echo "   🌐 Browser: http://[PI_IP]:8080/display"
-echo "   ⌨️ Manual: chromium-browser --kiosk http://localhost:8080/display"
+echo "   ⌨️ Manual test: /home/pi/start_cec_display.sh"
 echo ""
-echo "🔄 Reboot required to enable UART and HDMI display"
+echo "🔧 If HDMI display doesn't work after reboot:"
+echo "   ssh pi@[PI_IP]"
+echo "   ./start_cec_display.sh"
+echo ""
+echo "🔄 Reboot required to enable all features"
 echo ""
 
-read -p "Reboot now to complete setup? (y/n) " -n 1 -r
+read -p "Reboot now to activate auto HDMI display? (y/n) " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
-  echo "🔄 Rebooting to activate all features..."
+  echo "🔄 Rebooting to activate auto HDMI display..."
   reboot
 fi
