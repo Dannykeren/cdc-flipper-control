@@ -87,14 +87,14 @@ echo "🎨 Creating ICSS professional display..."
 # Create the static ICSS professional display
 convert -size 1920x1080 xc:'#1e3c72' \
   -gravity center \
-  -pointsize 120 -fill white -annotate 0+0-300 'ICSS' \
-  -pointsize 80 -fill white -annotate 0+0-200 'Integrated Control' \
-  -pointsize 80 -fill white -annotate 0+0-120 'Solutions' \
-  -pointsize 48 -fill '#4ecdc4' -annotate 0+0-40 'Professional HDMI CEC Test Tool' \
-  -pointsize 36 -fill white -annotate 0+0+20 'Powered by Raspberry Pi Zero 2 and Flipper Zero' \
-  -pointsize 28 -fill '#4ecdc4' -annotate 0+0+80 'Designed by ICSS - Danny Keren' \
-  -pointsize 24 -fill white -annotate 0+0+160 'Ready for Professional Field Testing' \
-  -pointsize 20 -fill '#aaaaaa' -annotate 0+0+240 'Use Flipper Zero to control CEC devices' \
+  -pointsize 120 -fill white -annotate +0-300 'ICSS' \
+  -pointsize 80 -fill white -annotate +0-200 'Integrated Control' \
+  -pointsize 80 -fill white -annotate +0-120 'Solutions' \
+  -pointsize 48 -fill '#4ecdc4' -annotate +0-40 'Professional HDMI CEC Test Tool' \
+  -pointsize 36 -fill white -annotate +0+20 'Powered by Raspberry Pi Zero 2 and Flipper Zero' \
+  -pointsize 28 -fill '#4ecdc4' -annotate +0+80 'Designed by ICSS - Danny Keren' \
+  -pointsize 24 -fill white -annotate +0+160 'Ready for Professional Field Testing' \
+  -pointsize 20 -fill '#aaaaaa' -annotate +0+240 'Use Flipper Zero to control CEC devices' \
   "$USER_HOME/icss_display.png"
 
 echo "✅ Created ICSS professional display"
