@@ -50,42 +50,30 @@ if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
 fi
 EOF
 
-# X11 startup script - KEEP DISPLAY ALWAYS ON
+# Create X11 startup script - KEEP DISPLAY ALWAYS ON
 cat > /home/pi/.xinitrc << 'EOF'
 #!/bin/bash
-# FIELD MODE: Keep HDMI display always active
+# Wait for services
+sleep 20
 
-# Disable all power management
-xset s off
-xset s noblank
-xset -dpms
+# Disable power management  
+xset s off 2>/dev/null || true
+xset s noblank 2>/dev/null || true
+xset -dpms 2>/dev/null || true
 
-# Start minimal window manager
+# Start window manager
 openbox &
+sleep 2
 
-# Wait for CEC service to be ready
-sleep 15
+# Launch browser
+DISPLAY=:0 chromium-browser \
+    --kiosk \
+    --no-sandbox \
+    --disable-web-security \
+    --window-size=1920,1080 \
+    http://localhost:8080/display &
 
-# Launch CEC display - RETRY FOREVER
-while true; do
-    echo "🚀 Starting CEC display..."
-    chromium-browser \
-        --kiosk \
-        --disable-infobars \
-        --disable-session-crashed-bubble \
-        --disable-web-security \
-        --disable-features=TranslateUI,VizDisplayCompositor \
-        --no-sandbox \
-        --disable-dev-shm-usage \
-        --disable-gpu-sandbox \
-        --window-position=0,0 \
-        --window-size=1920,1080 \
-        --display=:0 \
-        http://localhost:8080/display
-    
-    echo "⚠️ Browser crashed, restarting in 5 seconds..."
-    sleep 5
-done
+wait
 EOF
 
 chmod +x /home/pi/.xinitrc
