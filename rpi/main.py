@@ -20,7 +20,7 @@ logger = logging.getLogger("main")
 def execute_cec_command(command, vendor="Unknown", timeout=10):
     """Execute CEC command - clean and simple"""
     try:
-        logger.info(f"Executing CEC command: {command}")
+        logger.info("Executing CEC command: " + command)
         
         process = subprocess.Popen(
             ['cec-client', '-s', '-d', '1'],
@@ -33,17 +33,17 @@ def execute_cec_command(command, vendor="Unknown", timeout=10):
         stdout, stderr = process.communicate(input=command + '\n', timeout=timeout)
         
         if process.returncode == 0:
-            logger.info(f"✅ Command successful: {command}")
-            return f"✅ Command executed: {command}"
+            logger.info("✅ Command successful: " + command)
+            return "✅ Command executed: " + command
         else:
-            logger.error(f"❌ Command failed: {command} - {stderr}")
-            return f"❌ Command failed: {stderr}"
+            logger.error("❌ Command failed: " + command + " - " + stderr)
+            return "❌ Command failed: " + stderr
             
     except subprocess.TimeoutExpired:
         process.kill()
-        return f"❌ Command timed out: {command}"
+        return "❌ Command timed out: " + command
     except Exception as e:
-        return f"❌ Error executing command: {str(e)}"
+        return "❌ Error executing command: " + str(e)
 
 class CECController:
     def __init__(self):
@@ -59,7 +59,7 @@ class CECController:
             uart_thread.start()
             logger.info("UART interface started on /dev/ttyAMA0")
         except Exception as e:
-            logger.error(f"Failed to start UART: {e}")
+            logger.error("Failed to start UART: " + str(e))
     
     def uart_loop(self):
         """Handle UART communication with Flipper"""
@@ -68,14 +68,14 @@ class CECController:
                 if self.uart_serial and self.uart_serial.in_waiting > 0:
                     line = self.uart_serial.readline().decode('utf-8').strip()
                     if line:
-                        logger.info(f"UART received: '{line}'")
+                        logger.info("UART received: '" + line + "'")
                         response = self.process_command(line)
                         if self.uart_serial:
                             self.uart_serial.write((response + '\n').encode('utf-8'))
-                            logger.info(f"UART sent: {response}")
+                            logger.info("UART sent: " + response)
                 time.sleep(0.1)
             except Exception as e:
-                logger.error(f"UART error: {e}")
+                logger.error("UART error: " + str(e))
                 time.sleep(1)
     
     def process_command(self, command_json):
@@ -152,13 +152,13 @@ class CECController:
                 return json.dumps({"status": "success", "result": result})
             
             else:
-                return json.dumps({"status": "error", "result": f"Unknown command: {cmd_type}"})
+                return json.dumps({"status": "error", "result": "Unknown command: " + cmd_type})
                 
         except json.JSONDecodeError:
             return json.dumps({"status": "error", "result": "Invalid JSON"})
         except Exception as e:
-            logger.error(f"Command processing error: {str(e)}")
-            return json.dumps({"status": "error", "result": str(e)}")
+            logger.error("Command processing error: " + str(e))
+            return json.dumps({"status": "error", "result": str(e)})
     
     def run(self):
         """Main application loop"""
