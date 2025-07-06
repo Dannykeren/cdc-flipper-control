@@ -624,21 +624,21 @@ void cec_remote_scene_result_on_enter(void* context) {
     
     memset(app->result_buffer, 0, sizeof(app->result_buffer));
     
-    popup_set_header(app->popup, "Sending...", 64, 5, AlignCenter, AlignTop);
+    popup_set_header(app->popup, "Sending...", 64, 10, AlignCenter, AlignTop);
     popup_set_text(app->popup, "Please wait...", 64, 32, AlignCenter, AlignCenter);
     view_dispatcher_switch_to_view(app->view_dispatcher, CECRemoteViewPopup);
     
     // Send command and get clean response
     if(cec_remote_send_command(app, app->text_buffer)) {
-        // Set header at top
         popup_set_header(app->popup, "Command Result", 64, 5, AlignCenter, AlignTop);
         
-        // Create display text with ALL 4 elements visible
+        // Create display text with better formatting and spacing
         char display_text[256];
         if(strlen(app->brightsign_code) > 0) {
-            // Format: Command result + spacing + BrightSign label + code
+            // Format: Result message + BrightSign code with proper spacing
+            // Using larger spacing between lines for better readability
             snprintf(display_text, sizeof(display_text), 
-                    "%.35s\n\n\nBrightSign Code:\n\n%.20s", 
+                    "%.35s\n\n\nBrightSign Code:\n%.20s", 
                     app->result_buffer, app->brightsign_code);
         } else {
             // Show just the result for commands without BrightSign codes
@@ -646,8 +646,8 @@ void cec_remote_scene_result_on_enter(void* context) {
             display_text[sizeof(display_text) - 1] = '\0';
         }
         
-        // Position text below header with proper spacing
-        popup_set_text(app->popup, display_text, 64, 25, AlignCenter, AlignTop);
+        // Use larger text positioning for better visibility
+        popup_set_text(app->popup, display_text, 64, 35, AlignCenter, AlignCenter);
         
         if(strstr(app->result_buffer, "✅")) {
             notification_message(app->notifications, &sequence_success);
@@ -656,7 +656,7 @@ void cec_remote_scene_result_on_enter(void* context) {
         }
     } else {
         popup_set_header(app->popup, "Error", 64, 5, AlignCenter, AlignTop);
-        popup_set_text(app->popup, app->result_buffer, 64, 25, AlignCenter, AlignTop);
+        popup_set_text(app->popup, app->result_buffer, 64, 35, AlignCenter, AlignCenter);
         notification_message(app->notifications, &sequence_error);
     }
 }
