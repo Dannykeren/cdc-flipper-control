@@ -624,29 +624,30 @@ void cec_remote_scene_result_on_enter(void* context) {
     
     memset(app->result_buffer, 0, sizeof(app->result_buffer));
     
-    popup_set_header(app->popup, "Sending...", 64, 8, AlignCenter, AlignTop);
+    popup_set_header(app->popup, "Sending...", 64, 5, AlignCenter, AlignTop);
     popup_set_text(app->popup, "Please wait...", 64, 32, AlignCenter, AlignCenter);
     view_dispatcher_switch_to_view(app->view_dispatcher, CECRemoteViewPopup);
     
     // Send command and get clean response
     if(cec_remote_send_command(app, app->text_buffer)) {
-        popup_set_header(app->popup, "Command Result", 64, 2, AlignCenter, AlignTop);
+        // Set header at top
+        popup_set_header(app->popup, "Command Result", 64, 5, AlignCenter, AlignTop);
         
-        // Create display text with even spacing across 4 lines
+        // Create display text with ALL 4 elements visible
         char display_text[256];
         if(strlen(app->brightsign_code) > 0) {
-            // Format with even spacing: Line1 (Y=2), Line2 (Y=24), Line3 (Y=46), Line4 (Y=68)
+            // Format: Command result + spacing + BrightSign label + code
             snprintf(display_text, sizeof(display_text), 
-                    "\n\n%.35s\n\n\n\nBrightSign Code:\n%.20s", 
+                    "%.35s\n\n\nBrightSign Code:\n\n%.20s", 
                     app->result_buffer, app->brightsign_code);
         } else {
-            // Show just the result with padding for consistent spacing
-            snprintf(display_text, sizeof(display_text), 
-                    "\n\n%.50s", app->result_buffer);
+            // Show just the result for commands without BrightSign codes
+            strncpy(display_text, app->result_buffer, sizeof(display_text) - 1);
+            display_text[sizeof(display_text) - 1] = '\0';
         }
         
-        // Position text to start after header with proper spacing
-        popup_set_text(app->popup, display_text, 64, 22, AlignCenter, AlignTop);
+        // Position text below header with proper spacing
+        popup_set_text(app->popup, display_text, 64, 25, AlignCenter, AlignTop);
         
         if(strstr(app->result_buffer, "✅")) {
             notification_message(app->notifications, &sequence_success);
@@ -654,8 +655,8 @@ void cec_remote_scene_result_on_enter(void* context) {
             notification_message(app->notifications, &sequence_error);
         }
     } else {
-        popup_set_header(app->popup, "Error", 64, 2, AlignCenter, AlignTop);
-        popup_set_text(app->popup, app->result_buffer, 64, 22, AlignCenter, AlignTop);
+        popup_set_header(app->popup, "Error", 64, 5, AlignCenter, AlignTop);
+        popup_set_text(app->popup, app->result_buffer, 64, 25, AlignCenter, AlignTop);
         notification_message(app->notifications, &sequence_error);
     }
 }
